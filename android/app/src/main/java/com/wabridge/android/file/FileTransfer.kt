@@ -25,7 +25,7 @@ data class FileChunk(
 ) {
     init {
         require(transferId.size == 16)
-        require(data.isNotEmpty() && data.size <= MAX_CHUNK)
+        require(data.isNotEmpty() && data.size <= FileCodec.MAX_CHUNK)
     }
 }
 
