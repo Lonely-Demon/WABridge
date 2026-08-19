@@ -32,7 +32,7 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
       - name: Build Release
         shell: pwsh
-        run: cmake --build build-windows --config Release --parallel --target wabridge_windows
+        run: cmake --build build-windows --config Release --parallel
       - name: Run native Release tests
         shell: pwsh
         run: ctest --test-dir build-windows -C Release --output-on-failure
