@@ -2,7 +2,29 @@
 
 #include <utility>
 
+#ifdef _WIN32
+#include <winsock2.h>
+#else
+#include <sys/select.h>
+#endif
+
 namespace wabridge::coordinator {
+namespace {
+
+bool readable(const net::NativeSocket socket) {
+    fd_set read_set;
+    FD_ZERO(&read_set);
+    FD_SET(socket, &read_set);
+    timeval timeout{0, 100000};
+#ifdef _WIN32
+    return ::select(0, &read_set, nullptr, nullptr, &timeout) > 0;
+#else
+    return ::select(socket + 1, &read_set, nullptr, nullptr, &timeout) > 0;
+#endif
+}
+
+} // namespace
+
 
 Coordinator::Coordinator(AcceptHandler handler) : handler_(std::move(handler)) {}
 
@@ -39,12 +61,14 @@ std::uint16_t Coordinator::port() const noexcept {
 
 void Coordinator::accept_loop() {
     while (running_.load()) {
-        std::optional<net::Socket> accepted;
+        net::Socket* listener = nullptr;
         {
             std::lock_guard lock(mutex_);
             if (!listener_.has_value()) return;
-            accepted = listener_->accept();
+            listener = &listener_.value();
         }
+        if (!readable(listener->native())) continue;
+        auto accepted = listener->accept();
         if (!accepted.has_value()) {
             if (running_.load()) continue;
             return;
