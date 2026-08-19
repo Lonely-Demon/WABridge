@@ -6,7 +6,7 @@
 namespace wabridge::protocol {
 namespace {
 
-std::size_t channel_limit(const std::uint8_t channel) {
+std::size_t channel_limit_impl(const std::uint8_t channel) {
     switch (channel) {
     case 1: return 64u * 1024u;
     case 2: return 4u * 1024u * 1024u;
@@ -55,6 +55,10 @@ std::uint64_t get_u64(const std::vector<std::uint8_t>& data, const std::size_t a
 }
 
 } // namespace
+
+std::size_t channel_limit(const std::uint8_t channel) {
+    return channel_limit_impl(channel);
+}
 
 std::vector<std::uint8_t> encode(const Envelope& envelope) {
     const auto limit = channel_limit(envelope.channel);

@@ -21,8 +21,11 @@ struct Envelope {
     std::uint16_t flags{};
     std::uint64_t request_id{};
     std::vector<std::uint8_t> payload;
+
+    friend bool operator==(const Envelope&, const Envelope&) = default;
 };
 
+std::size_t channel_limit(std::uint8_t channel);
 std::vector<std::uint8_t> encode(const Envelope& envelope);
 Envelope decode(const std::vector<std::uint8_t>& frame);
 

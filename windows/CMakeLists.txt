@@ -11,6 +11,7 @@ add_library(wabridge_protocol STATIC
     src/wabridge_envelope.cpp
     src/wabridge_session.cpp
     src/wabridge_tls.cpp
+    src/wabridge_tls_stream.cpp
     src/wabridge_pairing.cpp
 )
 target_include_directories(wabridge_protocol PUBLIC include)
@@ -35,9 +36,17 @@ target_link_libraries(wabridge_tls_handshake_test PRIVATE wabridge_protocol)
 add_executable(wabridge_pairing_test ../tests/test_cpp_pairing.cpp)
 target_link_libraries(wabridge_pairing_test PRIVATE wabridge_protocol)
 
+add_executable(wabridge_tls_stream_test ../tests/test_cpp_tls_stream.cpp)
+target_link_libraries(wabridge_tls_stream_test PRIVATE wabridge_protocol)
+
+if (NOT MSVC)
+    target_link_libraries(wabridge_tls_stream_test PRIVATE pthread)
+endif()
+
 enable_testing()
 add_test(NAME wabridge_protocol_test COMMAND wabridge_protocol_test)
 add_test(NAME wabridge_session_test COMMAND wabridge_session_test)
 add_test(NAME wabridge_tls_test COMMAND wabridge_tls_test)
 add_test(NAME wabridge_tls_handshake_test COMMAND wabridge_tls_handshake_test)
 add_test(NAME wabridge_pairing_test COMMAND wabridge_pairing_test)
+add_test(NAME wabridge_tls_stream_test COMMAND wabridge_tls_stream_test)
