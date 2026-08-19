@@ -1,7 +1,10 @@
 #include "wabridge_tls.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <iostream>
+
+#define REQUIRE(condition) do { if (!(condition)) std::abort(); } while (false)
 #include <memory>
 #include <string>
 
@@ -23,29 +26,29 @@ std::string bio_string(BIO* bio) {
 
 Identity make_identity(const char* common_name) {
     EVP_PKEY* raw_key = EVP_RSA_gen(2048);
-    assert(raw_key != nullptr);
+    REQUIRE(raw_key != nullptr);
     std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> key(raw_key, EVP_PKEY_free);
 
     X509* raw_certificate = X509_new();
-    assert(raw_certificate != nullptr);
+    REQUIRE(raw_certificate != nullptr);
     std::unique_ptr<X509, decltype(&X509_free)> certificate(raw_certificate, X509_free);
-    assert(X509_set_version(certificate.get(), 2) == 1);
-    assert(ASN1_INTEGER_set(X509_get_serialNumber(certificate.get()), 1) == 1);
-    assert(X509_gmtime_adj(X509_getm_notBefore(certificate.get()), 0) != nullptr);
-    assert(X509_gmtime_adj(X509_getm_notAfter(certificate.get()), 3600) != nullptr);
-    assert(X509_set_pubkey(certificate.get(), key.get()) == 1);
+    REQUIRE(X509_set_version(certificate.get(), 2) == 1);
+    REQUIRE(ASN1_INTEGER_set(X509_get_serialNumber(certificate.get()), 1) == 1);
+    REQUIRE(X509_gmtime_adj(X509_getm_notBefore(certificate.get()), 0) != nullptr);
+    REQUIRE(X509_gmtime_adj(X509_getm_notAfter(certificate.get()), 3600) != nullptr);
+    REQUIRE(X509_set_pubkey(certificate.get(), key.get()) == 1);
 
     X509_NAME* subject = X509_get_subject_name(certificate.get());
-    assert(X509_NAME_add_entry_by_txt(subject, "CN", MBSTRING_ASC,
+    REQUIRE(X509_NAME_add_entry_by_txt(subject, "CN", MBSTRING_ASC,
                                       reinterpret_cast<const unsigned char*>(common_name), -1, -1, 0) == 1);
-    assert(X509_set_issuer_name(certificate.get(), subject) == 1);
-    assert(X509_sign(certificate.get(), key.get(), EVP_sha256()) > 0);
+    REQUIRE(X509_set_issuer_name(certificate.get(), subject) == 1);
+    REQUIRE(X509_sign(certificate.get(), key.get(), EVP_sha256()) > 0);
 
     BIO* certificate_bio = BIO_new(BIO_s_mem());
     BIO* key_bio = BIO_new(BIO_s_mem());
-    assert(certificate_bio != nullptr && key_bio != nullptr);
-    assert(PEM_write_bio_X509(certificate_bio, certificate.get()) == 1);
-    assert(PEM_write_bio_PrivateKey(key_bio, key.get(), nullptr, nullptr, 0, nullptr, nullptr) == 1);
+    REQUIRE(certificate_bio != nullptr && key_bio != nullptr);
+    REQUIRE(PEM_write_bio_X509(certificate_bio, certificate.get()) == 1);
+    REQUIRE(PEM_write_bio_PrivateKey(key_bio, key.get(), nullptr, nullptr, 0, nullptr, nullptr) == 1);
     Identity result{bio_string(certificate_bio), bio_string(key_bio)};
     BIO_free(certificate_bio);
     BIO_free(key_bio);
@@ -55,7 +58,7 @@ Identity make_identity(const char* common_name) {
 bool handshake(SSL* client, SSL* server) {
     BIO* client_bio = nullptr;
     BIO* server_bio = nullptr;
-    assert(BIO_new_bio_pair(&client_bio, 0, &server_bio, 0) == 1);
+    REQUIRE(BIO_new_bio_pair(&client_bio, 0, &server_bio, 0) == 1);
     SSL_set_bio(client, client_bio, client_bio);
     SSL_set_bio(server, server_bio, server_bio);
     SSL_set_connect_state(client);
@@ -95,7 +98,10 @@ bool handshake(SSL* client, SSL* server) {
 int main() {
     const auto server_identity = make_identity("WABridge Test Server");
     const auto client_identity = make_identity("WABridge Test Client");
-
+    REQUIRE(server_identity.certificate.find("BEGIN CERTIFICATE") != std::string::npos);
+    REQUIRE(client_identity.certificate.find("BEGIN CERTIFICATE") != std::string::npos);
+    REQUIRE(server_identity.private_key.find("BEGIN") != std::string::npos);
+    REQUIRE(client_identity.private_key.find("BEGIN") != std::string::npos);
     const auto server_context = wabridge::tls::Context::server(
         server_identity.certificate, server_identity.private_key, client_identity.certificate);
     const auto client_context = wabridge::tls::Context::client(
@@ -103,14 +109,14 @@ int main() {
 
     SSL* server = SSL_new(server_context.native());
     SSL* client = SSL_new(client_context.native());
-    assert(server != nullptr && client != nullptr);
-    assert(handshake(client, server));
+    REQUIRE(server != nullptr && client != nullptr);
+    REQUIRE(handshake(client, server));
 
-    assert(wabridge::tls::negotiated_tls13(client));
-    assert(wabridge::tls::negotiated_tls13(server));
-    assert(wabridge::tls::peer_fingerprint_sha256(client) ==
+    REQUIRE(wabridge::tls::negotiated_tls13(client));
+    REQUIRE(wabridge::tls::negotiated_tls13(server));
+    REQUIRE(wabridge::tls::peer_fingerprint_sha256(client) ==
            wabridge::tls::certificate_fingerprint_sha256(SSL_get_peer_certificate(client)));
-    assert(wabridge::tls::peer_fingerprint_sha256(server) ==
+    REQUIRE(wabridge::tls::peer_fingerprint_sha256(server) ==
            wabridge::tls::certificate_fingerprint_sha256(SSL_get_peer_certificate(server)));
 
     SSL_free(client);
@@ -122,8 +128,8 @@ int main() {
         server_identity.certificate, server_identity.private_key, client_identity.certificate);
     SSL* wrong_client = SSL_new(wrong_client_context.native());
     SSL* pinned_server = SSL_new(pinned_server_context.native());
-    assert(wrong_client != nullptr && pinned_server != nullptr);
-    assert(!handshake(wrong_client, pinned_server));
+    REQUIRE(wrong_client != nullptr && pinned_server != nullptr);
+    REQUIRE(!handshake(wrong_client, pinned_server));
     SSL_free(wrong_client);
     SSL_free(pinned_server);
 

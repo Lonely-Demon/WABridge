@@ -1,7 +1,10 @@
 #include "wabridge_tls_stream.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <iostream>
+
+#define REQUIRE(condition) do { if (!(condition)) std::abort(); } while (false)
 #include <string>
 #include <thread>
 
@@ -23,25 +26,25 @@ std::string bio_string(BIO* bio) {
 
 Identity make_identity(const char* common_name) {
     EVP_PKEY* raw_key = EVP_RSA_gen(2048);
-    assert(raw_key != nullptr);
+    REQUIRE(raw_key != nullptr);
     X509* raw_certificate = X509_new();
-    assert(raw_certificate != nullptr);
-    assert(X509_set_version(raw_certificate, 2) == 1);
-    assert(ASN1_INTEGER_set(X509_get_serialNumber(raw_certificate), 1) == 1);
-    assert(X509_gmtime_adj(X509_getm_notBefore(raw_certificate), 0) != nullptr);
-    assert(X509_gmtime_adj(X509_getm_notAfter(raw_certificate), 3600) != nullptr);
-    assert(X509_set_pubkey(raw_certificate, raw_key) == 1);
+    REQUIRE(raw_certificate != nullptr);
+    REQUIRE(X509_set_version(raw_certificate, 2) == 1);
+    REQUIRE(ASN1_INTEGER_set(X509_get_serialNumber(raw_certificate), 1) == 1);
+    REQUIRE(X509_gmtime_adj(X509_getm_notBefore(raw_certificate), 0) != nullptr);
+    REQUIRE(X509_gmtime_adj(X509_getm_notAfter(raw_certificate), 3600) != nullptr);
+    REQUIRE(X509_set_pubkey(raw_certificate, raw_key) == 1);
     X509_NAME* subject = X509_get_subject_name(raw_certificate);
-    assert(X509_NAME_add_entry_by_txt(subject, "CN", MBSTRING_ASC,
+    REQUIRE(X509_NAME_add_entry_by_txt(subject, "CN", MBSTRING_ASC,
                                       reinterpret_cast<const unsigned char*>(common_name), -1, -1, 0) == 1);
-    assert(X509_set_issuer_name(raw_certificate, subject) == 1);
-    assert(X509_sign(raw_certificate, raw_key, EVP_sha256()) > 0);
+    REQUIRE(X509_set_issuer_name(raw_certificate, subject) == 1);
+    REQUIRE(X509_sign(raw_certificate, raw_key, EVP_sha256()) > 0);
 
     BIO* certificate_bio = BIO_new(BIO_s_mem());
     BIO* key_bio = BIO_new(BIO_s_mem());
-    assert(certificate_bio != nullptr && key_bio != nullptr);
-    assert(PEM_write_bio_X509(certificate_bio, raw_certificate) == 1);
-    assert(PEM_write_bio_PrivateKey(key_bio, raw_key, nullptr, nullptr, 0, nullptr, nullptr) == 1);
+    REQUIRE(certificate_bio != nullptr && key_bio != nullptr);
+    REQUIRE(PEM_write_bio_X509(certificate_bio, raw_certificate) == 1);
+    REQUIRE(PEM_write_bio_PrivateKey(key_bio, raw_key, nullptr, nullptr, 0, nullptr, nullptr) == 1);
     Identity result{bio_string(certificate_bio), bio_string(key_bio)};
     BIO_free(certificate_bio);
     BIO_free(key_bio);
@@ -62,10 +65,10 @@ int main() {
 
     SSL* server_ssl = SSL_new(server_context.native());
     SSL* client_ssl = SSL_new(client_context.native());
-    assert(server_ssl != nullptr && client_ssl != nullptr);
+    REQUIRE(server_ssl != nullptr && client_ssl != nullptr);
     BIO* client_bio = nullptr;
     BIO* server_bio = nullptr;
-    assert(BIO_new_bio_pair(&client_bio, 0, &server_bio, 0) == 1);
+    REQUIRE(BIO_new_bio_pair(&client_bio, 0, &server_bio, 0) == 1);
     SSL_set_bio(client_ssl, client_bio, client_bio);
     SSL_set_bio(server_ssl, server_bio, server_bio);
     SSL_set_connect_state(client_ssl);
@@ -79,7 +82,7 @@ int main() {
     std::thread server_thread([&] { server_handshake = server.handshake(); });
     client_thread.join();
     server_thread.join();
-    assert(client_handshake && server_handshake);
+    REQUIRE(client_handshake && server_handshake);
 
     wabridge::protocol::Envelope outgoing;
     outgoing.channel = 1;
@@ -92,9 +95,9 @@ int main() {
     std::thread writer([&] { write_ok = client.write(outgoing); });
     const auto incoming = server.read();
     writer.join();
-    assert(write_ok);
-    assert(incoming.has_value());
-    assert(incoming.value() == outgoing);
+    REQUIRE(write_ok);
+    REQUIRE(incoming.has_value());
+    REQUIRE(incoming.value() == outgoing);
 
     std::cout << "TLS stream handshake and envelope transport passed\n";
     return 0;
