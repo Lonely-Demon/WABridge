@@ -68,7 +68,8 @@ private fun WABridgeShell(
             Text(detail)
             Button(onClick = onStart) { Text("Find Windows laptop") }
             Button(onClick = onStop) { Text("Stop session") }
-            pairing?.let { prompt ->
+            if (pairing != null) {
+                val prompt = pairing!!
                 Text("New Windows device requires approval", style = MaterialTheme.typography.titleMedium)
                 Text("Device: ${prompt.deviceId}")
                 Text("Fingerprint: ${prompt.fingerprint}")
