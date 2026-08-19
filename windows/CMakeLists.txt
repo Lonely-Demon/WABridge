@@ -26,6 +26,9 @@ add_library(wabridge_protocol STATIC
 )
 target_include_directories(wabridge_protocol PUBLIC include)
 target_link_libraries(wabridge_protocol PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+if (WIN32)
+    target_link_libraries(wabridge_protocol PUBLIC ws2_32)
+endif()
 
 option(WABRIDGE_BUILD_QT_WINDOWS "Build the Windows Qt6 coordinator application" OFF)
 if (WABRIDGE_BUILD_QT_WINDOWS)
