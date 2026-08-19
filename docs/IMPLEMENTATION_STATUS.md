@@ -16,6 +16,7 @@
 | Real TCP + TLS 1.3 + SESSION_HELLO | 11 native integration tests pass | Native workflow green | `5a8e2c4` |
 | File-transfer protocol | 13 native tests; Android JVM tests pass | Native and Android workflows green | `2429414`, `75fde71`, `af1f296`, `209cdef` |
 | Clipboard synchronization protocol | 13 native tests; Android JVM tests pass | Native and Android workflows green | `50cd318`, `91a5929`, `77a216a` |
+| Display mode and suspend control | 15 native tests; mode/sequence/toggle validation passes | Native and Android workflows green | `f0a8cee` |
 
 ## Current implementation boundary
 
@@ -33,4 +34,4 @@ The sandbox cannot compile or run a Windows SDK/Qt application, cannot install a
 
 ## Next implementation gates
 
-The next native gate is an actual Windows/Android control connection using the tested TLS stream, mDNS/manual endpoint selection, DPAPI/Keystore identity, and session hello/capability exchange. That gate is now green in the native loopback environment. File-transfer and clipboard protocol modules are implemented and validated before display-driver work because they provide useful end-to-end value without depending on the user’s legacy Intel GPU or Windows IDD installation state. The next gate is wiring these modules into the Android and Windows session owners with explicit user-facing controls and cancellation.
+The next native gate is an actual Windows/Android control connection using the tested TLS stream, mDNS/manual endpoint selection, DPAPI/Keystore identity, and session hello/capability exchange. That gate is now green in the native loopback environment. File-transfer and clipboard protocol modules are implemented and validated before display-driver work because they provide useful end-to-end value without depending on the user’s legacy Intel GPU or Windows IDD installation state. The next gate is wiring these modules into the Android and Windows session owners with explicit user-facing controls and cancellation. Display transport remains intentionally separate: Windows IDD/desktop capture and Android AccessibilityService/MediaProjection adapters require platform-specific builds and explicit user authorization, which cannot be granted in the Linux sandbox.
