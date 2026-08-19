@@ -19,10 +19,11 @@
 | Display mode and suspend control | 15 native tests; mode/sequence/toggle validation passes | Native and Android workflows green | `f0a8cee` |
 | Windows coordinator listener lifecycle | 16 native tests; dynamic bind/dispatch/idempotent stop pass | Native and Android workflows green | `a628cdc` |
 | Secure coordinator socket-to-session integration | 17 native tests; accepted socket mutual TLS and SessionPeer pass | Native and Android workflows green | `53aaf4b` |
+| Android debug APK artifact | APK build and upload pass; SHA-256 `4d825e0240e4af87ad4f378bb41b9b7f507ffc7f7f54f060e55faef44f06247a` | Android workflow green | `a3cb2fe` |
 
 ## Current implementation boundary
 
-The repository now has a tested, dependency-bounded protocol and secure pairing foundation. It does not yet ship a Windows GUI executable, Android APK, Windows IDD driver, MediaProjection service, AccessibilityService, file-transfer UI, clipboard synchronizer, or audio router. Those are deliberately downstream of the authenticated control session and will be implemented as independent modules.
+The repository now has a tested, dependency-bounded protocol and secure pairing foundation. CI also produces a reproducible Android debug APK artifact for black-box installation testing; it is a development artifact, not yet a signed production release. It does not yet ship a Windows GUI executable, Android APK, Windows IDD driver, MediaProjection service, AccessibilityService, file-transfer UI, clipboard synchronizer, or audio router. Those are deliberately downstream of the authenticated control session and will be implemented as independent modules.
 
 The native C++ core is portable and tested on Linux with OpenSSL 3.0. The production Windows coordinator will integrate the core with Windows sockets, DPAPI, the Windows UI framework, software-safe rendering, and the signed IDD package. The Android build is validated by GitHub Actions with Android API 35 and Kotlin 2.0/Compose Compiler.
 
