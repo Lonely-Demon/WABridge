@@ -97,7 +97,6 @@ std::optional<Socket> Socket::connect(const std::string_view host, const std::ui
 }
 
 std::optional<Socket> Socket::listen(const std::uint16_t port) {
-    if (port == 0) return std::nullopt;
     addrinfo hints{};
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_family = AF_INET6;

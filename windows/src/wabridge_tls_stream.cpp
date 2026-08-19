@@ -4,6 +4,31 @@
 #include <cstring>
 
 namespace wabridge::tls {
+
+Stream::Stream(SSL* ssl, const net::NativeSocket socket, const StreamMode mode) : ssl_(ssl) {
+    if (ssl_ == nullptr || socket == net::kInvalidSocket) {
+        SSL_free(ssl_);
+        ssl_ = nullptr;
+        throw TlsError("invalid TLS socket stream");
+    }
+#ifdef _WIN32
+    BIO* bio = BIO_new_socket(static_cast<int>(socket), BIO_NOCLOSE);
+#else
+    BIO* bio = BIO_new_socket(socket, BIO_NOCLOSE);
+#endif
+    if (bio == nullptr) {
+        SSL_free(ssl_);
+        ssl_ = nullptr;
+        throw TlsError("unable to create TLS socket BIO");
+    }
+    SSL_set_bio(ssl_, bio, bio);
+    if (mode == StreamMode::Server) {
+        SSL_set_accept_state(ssl_);
+    } else {
+        SSL_set_connect_state(ssl_);
+    }
+}
+
 namespace {
 
 std::uint16_t read_u16(const unsigned char* data) {
