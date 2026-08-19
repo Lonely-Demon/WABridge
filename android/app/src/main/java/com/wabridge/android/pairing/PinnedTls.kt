@@ -1,0 +1,45 @@
+package com.wabridge.android.pairing
+
+import java.security.MessageDigest
+import java.security.SecureRandom
+import java.security.cert.CertificateException
+import java.security.cert.X509Certificate
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocket
+import javax.net.ssl.X509TrustManager
+
+object PinnedTls {
+    fun context(identity: AndroidIdentityStore, peerCertificate: X509Certificate?, firstPair: Boolean): SSLContext {
+        require(firstPair || peerCertificate != null) { "pinned mode requires a peer certificate" }
+        val trustManager = object : X509TrustManager {
+            override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+
+            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {
+                if (chain.isEmpty()) throw CertificateException("client certificate chain is empty")
+            }
+
+            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
+                if (chain.isEmpty()) throw CertificateException("server certificate chain is empty")
+                if (!firstPair) {
+                    val expected = peerCertificate!!.encoded
+                    if (!MessageDigest.isEqual(expected, chain[0].encoded)) {
+                        throw CertificateException("WABridge peer certificate changed")
+                    }
+                }
+            }
+        }
+        return SSLContext.getInstance("TLSv1.3").apply {
+            init(identity.keyManagers(), arrayOf(trustManager), SecureRandom())
+        }
+    }
+
+    fun configure(socket: SSLSocket) {
+        socket.enabledProtocols = arrayOf("TLSv1.3")
+        socket.useClientMode = true
+        socket.enableSessionCreation = true
+    }
+
+    fun fingerprint(certificate: X509Certificate): String = certificate.publicKey.encoded
+        .let { MessageDigest.getInstance("SHA-256").digest(it) }
+        .joinToString(":") { "%02X".format(it) }
+}
