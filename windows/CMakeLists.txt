@@ -20,6 +20,7 @@ add_library(wabridge_protocol STATIC
     src/wabridge_file.cpp
     src/wabridge_clipboard.cpp
     src/wabridge_session_peer.cpp
+    src/wabridge_display.cpp
 )
 target_include_directories(wabridge_protocol PUBLIC include)
 target_link_libraries(wabridge_protocol PUBLIC OpenSSL::SSL OpenSSL::Crypto)
@@ -70,6 +71,9 @@ target_link_libraries(wabridge_clipboard_test PRIVATE wabridge_protocol)
 add_executable(wabridge_session_peer_test ../tests/test_cpp_session_peer.cpp)
 target_link_libraries(wabridge_session_peer_test PRIVATE wabridge_protocol)
 
+add_executable(wabridge_display_test ../tests/test_cpp_display.cpp)
+target_link_libraries(wabridge_display_test PRIVATE wabridge_protocol)
+
 if (NOT MSVC)
     target_link_libraries(wabridge_tls_stream_test PRIVATE pthread)
 endif()
@@ -89,3 +93,4 @@ add_test(NAME wabridge_socket_tls_test COMMAND wabridge_socket_tls_test)
 add_test(NAME wabridge_file_test COMMAND wabridge_file_test)
 add_test(NAME wabridge_clipboard_test COMMAND wabridge_clipboard_test)
 add_test(NAME wabridge_session_peer_test COMMAND wabridge_session_peer_test)
+add_test(NAME wabridge_display_test COMMAND wabridge_display_test)
