@@ -26,6 +26,17 @@ add_library(wabridge_protocol STATIC
 )
 target_include_directories(wabridge_protocol PUBLIC include)
 target_link_libraries(wabridge_protocol PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+
+option(WABRIDGE_BUILD_QT_WINDOWS "Build the Windows Qt6 coordinator application" OFF)
+if (WABRIDGE_BUILD_QT_WINDOWS)
+    find_package(Qt6 REQUIRED COMPONENTS Widgets)
+    add_executable(wabridge_windows WIN32 src/wabridge_qt_main.cpp)
+    target_link_libraries(wabridge_windows PRIVATE wabridge_protocol Qt6::Widgets)
+    target_compile_options(wabridge_windows PRIVATE
+        $<$<CXX_COMPILER_ID:MSVC>:/W4;/WX>
+        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall;-Wextra;-Wpedantic;-Werror>
+    )
+endif()
 target_compile_options(wabridge_protocol PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4;/WX>
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall;-Wextra;-Wpedantic;-Werror>

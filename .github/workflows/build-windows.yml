@@ -1,0 +1,51 @@
+name: Windows coordinator
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-release:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.3'
+          arch: win64_msvc2022_64
+          cache: true
+      - name: Install OpenSSL
+        shell: pwsh
+        run: & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install openssl:x64-windows
+      - name: Configure
+        shell: pwsh
+        run: >-
+          cmake -S windows -B build-windows -G "Visual Studio 17 2022" -A x64
+          -DWABRIDGE_BUILD_QT_WINDOWS=ON
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+      - name: Build Release
+        shell: pwsh
+        run: cmake --build build-windows --config Release --parallel --target wabridge_windows
+      - name: Run native Release tests
+        shell: pwsh
+        run: ctest --test-dir build-windows -C Release --output-on-failure
+      - name: Assemble Windows bundle
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/WABridge | Out-Null
+          Copy-Item build-windows/Release/wabridge_windows.exe dist/WABridge/
+          windeployqt --release --no-translations --no-compiler-runtime dist/WABridge/wabridge_windows.exe
+          Copy-Item "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/bin/libcrypto-3-x64.dll" dist/WABridge/ -ErrorAction Stop
+          Copy-Item "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/bin/libssl-3-x64.dll" dist/WABridge/ -ErrorAction Stop
+      - name: Upload Windows bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: wabridge-windows-release
+          path: dist/WABridge
+          if-no-files-found: error
