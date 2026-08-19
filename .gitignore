@@ -1,7 +1,8 @@
-__pycache__/
 *.py[cod]
-.pytest_cache/
-build/
-out/
 .gradle/
+.pytest_cache/
+__pycache__/
+build/
 local.properties
+out/
+tests/fixtures/*.key.pem
