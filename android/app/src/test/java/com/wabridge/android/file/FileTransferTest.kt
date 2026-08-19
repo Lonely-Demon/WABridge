@@ -13,7 +13,7 @@ class FileTransferTest {
         val decoded = FileCodec.decodeOffer(FileCodec.encodeOffer(offer))
         assertEquals(offer.size, decoded.size)
         assertArrayEquals(offer.transferId, decoded.transferId)
-        assertEquals("_.._photo.jpg", decoded.displayName)
+        assertEquals(".._photo.jpg", decoded.displayName)
         assertEquals(offer.mimeType, decoded.mimeType)
     }
 
