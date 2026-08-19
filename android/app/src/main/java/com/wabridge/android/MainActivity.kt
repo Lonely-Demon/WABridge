@@ -13,13 +13,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.wabridge.android.session.SessionRuntime
 import com.wabridge.android.session.WABridgeSessionService
-import kotlinx.coroutines.flow.collectAsState
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,6 +56,7 @@ private fun WABridgeShell(
     val state by SessionRuntime.state.collectAsState()
     val detail by SessionRuntime.detail.collectAsState()
     val pairing by SessionRuntime.pairing.collectAsState()
+    val pairingSnapshot = pairing
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -68,8 +69,8 @@ private fun WABridgeShell(
             Text(detail)
             Button(onClick = onStart) { Text("Find Windows laptop") }
             Button(onClick = onStop) { Text("Stop session") }
-            if (pairing != null) {
-                val prompt = pairing!!
+            if (pairingSnapshot != null) {
+                val prompt = pairingSnapshot
                 Text("New Windows device requires approval", style = MaterialTheme.typography.titleMedium)
                 Text("Device: ${prompt.deviceId}")
                 Text("Fingerprint: ${prompt.fingerprint}")
