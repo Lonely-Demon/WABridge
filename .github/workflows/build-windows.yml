@@ -22,7 +22,8 @@ jobs:
           cache: true
       - name: Install OpenSSL
         shell: pwsh
-        run: & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install openssl:x64-windows
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install openssl:x64-windows
       - name: Configure
         shell: pwsh
         run: >-
