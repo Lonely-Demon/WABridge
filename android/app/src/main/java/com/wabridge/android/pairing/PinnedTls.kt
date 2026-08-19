@@ -9,8 +9,29 @@ import javax.net.ssl.SSLSocket
 import javax.net.ssl.X509TrustManager
 
 object PinnedTls {
-    fun context(identity: AndroidIdentityStore, peerCertificate: X509Certificate?, firstPair: Boolean): SSLContext {
-        require(firstPair || peerCertificate != null) { "pinned mode requires a peer certificate" }
+    /** Compatibility API for callers that already hold the complete peer certificate. */
+    fun context(
+        identity: AndroidIdentityStore,
+        peerCertificate: X509Certificate?,
+        firstPair: Boolean,
+    ): SSLContext = contextWithFingerprint(
+        identity,
+        peerCertificate?.let(::fingerprint),
+        firstPair,
+    )
+
+    /**
+     * Builds a TLS 1.3 context that either permits the explicit first-pair flow
+     * or compares the peer certificate public-key fingerprint exactly.
+     */
+    fun contextWithFingerprint(
+        identity: AndroidIdentityStore,
+        pinnedFingerprint: String?,
+        firstPair: Boolean,
+    ): SSLContext {
+        require(firstPair || !pinnedFingerprint.isNullOrBlank()) {
+            "pinned mode requires a peer fingerprint"
+        }
         val trustManager = object : X509TrustManager {
             override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
 
@@ -21,8 +42,8 @@ object PinnedTls {
             override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
                 if (chain.isEmpty()) throw CertificateException("server certificate chain is empty")
                 if (!firstPair) {
-                    val expected = peerCertificate!!.encoded
-                    if (!MessageDigest.isEqual(expected, chain[0].encoded)) {
+                    val actual = fingerprint(chain[0])
+                    if (actual != pinnedFingerprint) {
                         throw CertificateException("WABridge peer certificate changed")
                     }
                 }

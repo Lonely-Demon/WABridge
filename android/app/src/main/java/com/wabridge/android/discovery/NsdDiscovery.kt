@@ -5,6 +5,13 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import java.util.concurrent.atomic.AtomicBoolean
 
+/**
+ * Wi-Fi DNS-SD discovery for WABridge.
+ *
+ * Android normally acts as a client of the Windows coordinator, so callers
+ * should use [startBrowsing] unless they also own a reachable TCP listener.
+ * [start] is retained for the combined advertise-and-browse case.
+ */
 class NsdDiscovery(
     context: Context,
     private val fingerprint: () -> String,
@@ -12,16 +19,39 @@ class NsdDiscovery(
     private val onError: (String) -> Unit,
 ) {
     private val manager = context.getSystemService(NsdManager::class.java)
-    private val stopped = AtomicBoolean(false)
+    private val stopped = AtomicBoolean(true)
     private var registrationListener: NsdManager.RegistrationListener? = null
     private var discoveryListener: NsdManager.DiscoveryListener? = null
     private var registered = false
     private var browsing = false
 
+    /** Starts advertising this device and browsing for Windows coordinators. */
     fun start(port: Int) {
         require(port in 1..65535)
-        if (!stopped.compareAndSet(true, false) && (registered || browsing)) return
+        ensureRunning()
+        startAdvertisingInternal(port)
+        startBrowsingInternal()
+    }
 
+    /** Starts browsing only; no local TCP listener or fake advertisement is required. */
+    fun startBrowsing() {
+        ensureRunning()
+        startBrowsingInternal()
+    }
+
+    /** Starts advertising only for a caller that owns a reachable TCP listener. */
+    fun startAdvertising(port: Int) {
+        require(port in 1..65535)
+        ensureRunning()
+        startAdvertisingInternal(port)
+    }
+
+    private fun ensureRunning() {
+        stopped.compareAndSet(true, false)
+    }
+
+    private fun startAdvertisingInternal(port: Int) {
+        if (registrationListener != null || stopped.get()) return
         val serviceInfo = NsdServiceInfo().apply {
             serviceName = "WABridge Android"
             serviceType = SERVICE_TYPE
@@ -41,8 +71,16 @@ class NsdDiscovery(
                 onError("NSD unregistration failed: $errorCode")
             }
         }
-        manager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, registrationListener)
+        runCatching {
+            manager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, registrationListener)
+        }.onFailure {
+            registrationListener = null
+            onError("NSD registration failed: ${it.message ?: "unknown error"}")
+        }
+    }
 
+    private fun startBrowsingInternal() {
+        if (discoveryListener != null || stopped.get()) return
         discoveryListener = object : NsdManager.DiscoveryListener {
             override fun onDiscoveryStarted(type: String) { browsing = true }
             override fun onDiscoveryStopped(type: String) { browsing = false }
@@ -59,19 +97,28 @@ class NsdDiscovery(
             }
             override fun onServiceLost(info: NsdServiceInfo) = Unit
         }
-        manager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
+        runCatching {
+            manager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
+        }.onFailure {
+            discoveryListener = null
+            onError("NSD discovery failed: ${it.message ?: "unknown error"}")
+        }
     }
 
     private fun resolve(candidate: NsdServiceInfo) {
         if (stopped.get()) return
-        manager.resolveService(candidate, object : NsdManager.ResolveListener {
-            override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) {
-                onError("NSD resolve failed: $errorCode")
-            }
-            override fun onServiceResolved(info: NsdServiceInfo) {
-                if (!stopped.get() && info.port in 1..65535) onCandidate(info)
-            }
-        })
+        runCatching {
+            manager.resolveService(candidate, object : NsdManager.ResolveListener {
+                override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) {
+                    onError("NSD resolve failed: $errorCode")
+                }
+                override fun onServiceResolved(info: NsdServiceInfo) {
+                    if (!stopped.get() && info.port in 1..65535) onCandidate(info)
+                }
+            })
+        }.onFailure {
+            onError("NSD resolve failed: ${it.message ?: "unknown error"}")
+        }
     }
 
     fun stop() {

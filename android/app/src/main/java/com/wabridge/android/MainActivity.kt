@@ -1,5 +1,6 @@
 package com.wabridge.android
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -13,22 +14,49 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import com.wabridge.android.session.SessionRuntime
+import com.wabridge.android.session.WABridgeSessionService
+import kotlinx.coroutines.flow.collectAsState
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { WABridgeShell() }
+        setContent {
+            WABridgeShell(
+                onStart = { startSession() },
+                onApprovePairing = { sendServiceAction(WABridgeSessionService.ACTION_APPROVE_PAIRING) },
+                onStop = { sendServiceAction(WABridgeSessionService.ACTION_STOP) },
+            )
+        }
+    }
+
+    private fun startSession() {
+        ContextCompat.startForegroundService(
+            this,
+            Intent(this, WABridgeSessionService::class.java).setAction(
+                WABridgeSessionService.ACTION_START,
+            ),
+        )
+    }
+
+    private fun sendServiceAction(action: String) {
+        startService(Intent(this, WABridgeSessionService::class.java).setAction(action))
     }
 }
 
 @Composable
-private fun WABridgeShell() {
-    var status by remember { mutableStateOf("Not connected") }
+private fun WABridgeShell(
+    onStart: () -> Unit,
+    onApprovePairing: () -> Unit,
+    onStop: () -> Unit,
+) {
+    val state by SessionRuntime.state.collectAsState()
+    val detail by SessionRuntime.detail.collectAsState()
+    val pairing by SessionRuntime.pairing.collectAsState()
+
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
             modifier = Modifier.padding(24.dp),
@@ -36,14 +64,20 @@ private fun WABridgeShell() {
         ) {
             Text("WABridge", style = MaterialTheme.typography.headlineLarge)
             Text("Windows–Android workspace bridge")
-            Text(status, style = MaterialTheme.typography.titleMedium)
-            Button(onClick = { status = "Searching for WABridge on this Wi-Fi" }) {
-                Text("Find Windows laptop")
+            Text("State: $state", style = MaterialTheme.typography.titleMedium)
+            Text(detail)
+            Button(onClick = onStart) { Text("Find Windows laptop") }
+            Button(onClick = onStop) { Text("Stop session") }
+            pairing?.let { prompt ->
+                Text("New Windows device requires approval", style = MaterialTheme.typography.titleMedium)
+                Text("Device: ${prompt.deviceId}")
+                Text("Fingerprint: ${prompt.fingerprint}")
+                Button(onClick = onApprovePairing) { Text("Approve pairing") }
             }
-            Button(onClick = { status = "Pairing requires matching the code shown on both devices" }) {
-                Text("Pair a device")
-            }
-            Text("Display, Phone Control, files, clipboard, and audio remain disabled until a secure session is established.")
+            Text(
+                "TLS 1.3 and certificate pinning protect the session. " +
+                    "Phone Control and MediaProjection remain user-authorized features.",
+            )
         }
     }
 }

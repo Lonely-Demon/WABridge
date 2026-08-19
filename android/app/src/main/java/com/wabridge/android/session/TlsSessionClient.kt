@@ -37,14 +37,14 @@ class TlsSessionClient(
 
     suspend fun connect(
         endpoint: InetSocketAddress,
-        pinnedPeer: X509Certificate?,
+        pinnedPeerFingerprint: String?,
         firstPair: Boolean,
     ): Peer = withContext(Dispatchers.IO) {
         require(capabilitiesHash.size == 32)
         stop()
         stopped.set(false)
         try {
-            val tls = PinnedTls.context(identity, pinnedPeer, firstPair)
+            val tls = PinnedTls.contextWithFingerprint(identity, pinnedPeerFingerprint, firstPair)
             val connected = (tls.socketFactory.createSocket() as SSLSocket).apply {
                 connect(endpoint, 5_000)
                 soTimeout = 5_000
