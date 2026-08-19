@@ -15,7 +15,7 @@ class ClipboardUpdate(
         require(originDeviceId.isNotEmpty() && originDeviceId.length <= 64)
         require(originDeviceId.all { it.code in 0x20..0x7e })
         require(timestampMs > 0)
-        require(text.isNotEmpty() && text.toByteArray().size <= MAX_TEXT)
+        require(text.isNotEmpty() && text.toByteArray().size <= ClipboardCodec.MAX_TEXT)
     }
 }
 
