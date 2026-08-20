@@ -28,11 +28,12 @@ add_library(wabridge_protocol STATIC
     src/wabridge_identity.cpp
     src/wabridge_session_router.cpp
     src/wabridge_feature_dispatch.cpp
+    src/wabridge_wasapi_audio.cpp
 )
 target_include_directories(wabridge_protocol PUBLIC include)
 target_link_libraries(wabridge_protocol PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 if (WIN32)
-    target_link_libraries(wabridge_protocol PUBLIC ws2_32 crypt32)
+    target_link_libraries(wabridge_protocol PUBLIC ws2_32 crypt32 ole32)
 endif()
 
 option(WABRIDGE_BUILD_QT_WINDOWS "Build the Windows Qt6 coordinator application" OFF)
@@ -116,6 +117,9 @@ target_link_libraries(wabridge_session_router_test PRIVATE wabridge_protocol)
 add_executable(wabridge_feature_dispatch_test ../tests/test_cpp_feature_dispatch.cpp)
 target_link_libraries(wabridge_feature_dispatch_test PRIVATE wabridge_protocol)
 
+add_executable(wabridge_wasapi_audio_test ../tests/test_cpp_wasapi_audio.cpp)
+target_link_libraries(wabridge_wasapi_audio_test PRIVATE wabridge_protocol)
+
 if (NOT MSVC)
     target_link_libraries(wabridge_tls_stream_test PRIVATE pthread)
 endif()
@@ -143,3 +147,4 @@ add_test(NAME wabridge_input_test COMMAND $<TARGET_FILE:wabridge_input_test>)
 add_test(NAME wabridge_identity_test COMMAND $<TARGET_FILE:wabridge_identity_test>)
 add_test(NAME wabridge_session_router_test COMMAND $<TARGET_FILE:wabridge_session_router_test>)
 add_test(NAME wabridge_feature_dispatch_test COMMAND $<TARGET_FILE:wabridge_feature_dispatch_test>)
+add_test(NAME wabridge_wasapi_audio_test COMMAND $<TARGET_FILE:wabridge_wasapi_audio_test>)
