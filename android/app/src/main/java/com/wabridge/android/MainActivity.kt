@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -262,7 +263,7 @@ private fun ConnectDashboard(
                         SessionState.PAIRING_REQUIRED -> "Approval needed"
                         SessionState.DISCOVERING, SessionState.CONNECTING, SessionState.TLS_HANDSHAKING, SessionState.IDENTITY_CHECKING -> "Finding your Windows laptop"
                         SessionState.FAILED -> "Connection needs attention"
-                        else -> "Connect your Windows laptop",
+                        else -> "Connect your Windows laptop"
                     },
                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                     textAlign = TextAlign.Center,
@@ -314,7 +315,7 @@ private fun ConnectDashboard(
             PairingCard(pairing, onApprovePairing)
         }
         CapabilityPreview(connected = state == SessionState.ESTABLISHED, onStartAudioCapture = onStartAudioCapture)
-        SecurityCard()
+        SettingsCard(Icons.Filled.Security, "Encrypted by default", "WABridge uses TLS 1.3, certificate pinning, and explicit first-pair approval.", WABlue)
         GlassButton(text = "Stop session", onClick = onStop, icon = Icons.Filled.Warning, tint = Color(0xFFFF8A80))
     }
 }
