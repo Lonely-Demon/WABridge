@@ -1,6 +1,9 @@
 #include "wabridge_messages.h"
 #include "wabridge_feature_dispatch.h"
 #include "wabridge_identity.h"
+#include "wabridge_input.h"
+#include "wabridge_input_capture.h"
+#include "wabridge_wasapi_audio.h"
 #include "wabridge_secure_coordinator.h"
 #include "wabridge_tls.h"
 
@@ -22,7 +25,9 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <atomic>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <utility>
@@ -67,8 +72,11 @@ public:
         start_ = new QPushButton("Start secure coordinator", root);
         stop_ = new QPushButton("Stop", root);
         stop_->setEnabled(false);
+        phone_control_ = new QPushButton("Start Phone Control", root);
+        phone_control_->setEnabled(false);
         buttons->addWidget(start_);
         buttons->addWidget(stop_);
+        buttons->addWidget(phone_control_);
         layout->addLayout(buttons);
 
         auto* note = new QLabel(
@@ -83,6 +91,7 @@ public:
 
         connect(start_, &QPushButton::clicked, this, &CoordinatorWindow::start_coordinator);
         connect(stop_, &QPushButton::clicked, this, &CoordinatorWindow::stop_coordinator);
+        connect(phone_control_, &QPushButton::clicked, this, &CoordinatorWindow::toggle_phone_control);
 
         auto* timer = new QTimer(this);
         connect(timer, &QTimer::timeout, this, [this] {
@@ -152,7 +161,7 @@ private:
         hello.max_frame = 4U * 1024U * 1024U;
 
             auto context = wabridge::tls::Context::server(certificate, private_key, std::nullopt);
-            auto coordinator = std::make_unique<wabridge::coordinator::SecureCoordinator>(std::move(context), std::move(hello));
+            auto coordinator = std::make_shared<wabridge::coordinator::SecureCoordinator>(std::move(context), std::move(hello));
             wabridge::features::Dispatcher feature_dispatcher;
             feature_dispatcher.on_file_offer = [this](const wabridge::file::Offer& offer) {
                 set_status_async(QString("Incoming file offer: %1 (%2 bytes)")
@@ -173,9 +182,17 @@ private:
                 return true;
             };
             feature_dispatcher.on_audio_frame = [this](const wabridge::audio::Frame& frame) {
-                set_status_async(QString("Audio frame received: %1 bytes at %2 Hz")
-                                     .arg(static_cast<qulonglong>(frame.data.size()))
-                                     .arg(frame.sample_rate));
+                if (frame.codec != wabridge::audio::Codec::Pcm16) return false;
+                std::lock_guard lock(audio_mutex_);
+                if (!renderer_.running() && !renderer_.start(frame.sample_rate, frame.channels)) {
+                    set_status_async("Unable to open the Windows default audio renderer");
+                    return false;
+                }
+                if (!renderer_.render(frame)) {
+                    renderer_.stop();
+                    set_status_async("Rejected or failed to render the incoming PCM16 audio frame");
+                    return false;
+                }
                 return true;
             };
             feature_dispatcher.on_input_event = [this](const wabridge::input::Event&) {
@@ -194,8 +211,24 @@ private:
                 return;
             }
             coordinator_ = std::move(coordinator);
+            const auto weak_coordinator = std::weak_ptr<wabridge::coordinator::SecureCoordinator>(coordinator_);
+            auto request_counter = std::make_shared<std::atomic<std::uint32_t>>(1);
+            input_capture_ = std::make_unique<wabridge::platform_input::LowLevelCapture>(
+                [weak_coordinator, request_counter](const wabridge::input::Event& event) {
+                    try {
+                        const auto peer = weak_coordinator.lock();
+                        if (!peer) return;
+                        const auto payload = wabridge::input::encode_event(event);
+                        std::uint32_t request_id = request_counter->fetch_add(1);
+                        if (request_id == 0) request_id = request_counter->fetch_add(1);
+                        (void)peer->send({1, wabridge::features::kInputEvent, 0, request_id, payload});
+                    } catch (const wabridge::protocol::ProtocolError&) {
+                        // The bounded codec is fail-closed; malformed local events are dropped.
+                    }
+                });
             start_->setEnabled(false);
             stop_->setEnabled(true);
+            phone_control_->setEnabled(true);
             status_->setText(QString("Listening on TCP port %1 — awaiting Android%s")
                                  .arg(coordinator_->port())
                                  .arg(fingerprint.empty() ? QString() : QString(" — identity %1").arg(QString::fromStdString(fingerprint))));
@@ -205,12 +238,38 @@ private:
         }
     }
 
+    void toggle_phone_control() {
+        if (!input_capture_) return;
+        if (input_capture_->active()) {
+            input_capture_->stop();
+            phone_control_->setText("Start Phone Control");
+            status_->setText("Phone Control stopped");
+            return;
+        }
+        if (!input_capture_->start()) {
+            status_->setText("Phone Control could not start; Windows hook permission or platform support is unavailable");
+            return;
+        }
+        phone_control_->setText("Stop Phone Control");
+        status_->setText("Phone Control active — captured input is sent only over the authenticated session");
+    }
+
     void stop_coordinator() {
+        if (input_capture_) {
+            input_capture_->stop();
+            phone_control_->setText("Start Phone Control");
+        }
+        {
+            std::lock_guard lock(audio_mutex_);
+            renderer_.stop();
+        }
         if (!coordinator_) return;
         coordinator_->stop();
         coordinator_.reset();
+        input_capture_.reset();
         start_->setEnabled(true);
         stop_->setEnabled(false);
+        phone_control_->setEnabled(false);
         status_->setText("Stopped");
     }
 
@@ -220,7 +279,11 @@ private:
     QLabel* status_{};
     QPushButton* start_{};
     QPushButton* stop_{};
-    std::unique_ptr<wabridge::coordinator::SecureCoordinator> coordinator_;
+    QPushButton* phone_control_{};
+    std::shared_ptr<wabridge::coordinator::SecureCoordinator> coordinator_;
+    std::unique_ptr<wabridge::platform_input::LowLevelCapture> input_capture_;
+    wabridge::platform_audio::WasapiRenderer renderer_;
+    std::mutex audio_mutex_;
 };
 
 } // namespace

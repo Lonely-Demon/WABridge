@@ -40,6 +40,7 @@ bool SessionPeer::establish(const messages::SessionHello& local_hello) {
 }
 
 bool SessionPeer::send(const protocol::Envelope& envelope) {
+    std::lock_guard<std::mutex> lock(write_mutex_);
     if (!established_) return false;
     return stream_.write(envelope);
 }
@@ -61,11 +62,8 @@ bool SessionPeer::run(const std::function<bool(const protocol::Envelope&)>& hand
 }
 
 void SessionPeer::stop() noexcept {
-    if (!established_ && !peer_hello_.has_value()) {
-        stream_.close();
-        return;
-    }
-    established_ = false;
+    std::lock_guard<std::mutex> lock(write_mutex_);
+    established_.store(false);
     peer_hello_.reset();
     stream_.close();
 }

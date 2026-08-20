@@ -76,6 +76,12 @@ int main() {
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     REQUIRE(coordinator.established_sessions() == 1);
+    REQUIRE(coordinator.has_established_session());
+    REQUIRE(coordinator.send({1, wabridge::messages::kHeartbeatAck, 0, 88, {1}}));
+    const auto coordinator_frame = client_stream.read();
+    REQUIRE(coordinator_frame.has_value());
+    REQUIRE(coordinator_frame->kind == wabridge::messages::kHeartbeatAck);
+    REQUIRE(coordinator_frame->request_id == 88);
     REQUIRE(client_peer.send({1, wabridge::messages::kHeartbeat, 0, 77, {1}}));
     const auto heartbeat_ack = client_stream.read();
     REQUIRE(heartbeat_ack.has_value());
@@ -84,6 +90,10 @@ int main() {
     REQUIRE(heartbeat_ack->request_id == 77);
     REQUIRE(heartbeat_ack->payload == std::vector<std::uint8_t>{1});
     client_peer.stop();
+    for (int i = 0; i < 100 && coordinator.has_established_session(); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    REQUIRE(!coordinator.has_established_session());
     coordinator.stop();
     coordinator.stop();
     std::cout << "Secure coordinator integration tests passed\n";

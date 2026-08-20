@@ -21,11 +21,11 @@ LRESULT CALLBACK mouse_proc(int code, WPARAM message, LPARAM data) {
                 output.type = wabridge::input::Type::MouseMove;
                 break;
             case WM_LBUTTONDOWN: output.type = wabridge::input::Type::MouseButton; output.button = 1; output.flags = 1; break;
-            case WM_LBUTTONUP: output.type = wabridge::input::Type::MouseButton; output.button = 1; break;
+            case WM_LBUTTONUP: output.type = wabridge::input::Type::MouseButton; output.button = 1; output.flags = 2; break;
             case WM_RBUTTONDOWN: output.type = wabridge::input::Type::MouseButton; output.button = 2; output.flags = 1; break;
-            case WM_RBUTTONUP: output.type = wabridge::input::Type::MouseButton; output.button = 2; break;
+            case WM_RBUTTONUP: output.type = wabridge::input::Type::MouseButton; output.button = 2; output.flags = 2; break;
             case WM_MBUTTONDOWN: output.type = wabridge::input::Type::MouseButton; output.button = 3; output.flags = 1; break;
-            case WM_MBUTTONUP: output.type = wabridge::input::Type::MouseButton; output.button = 3; break;
+            case WM_MBUTTONUP: output.type = wabridge::input::Type::MouseButton; output.button = 3; output.flags = 2; break;
             case WM_MOUSEWHEEL:
                 output.type = wabridge::input::Type::MouseWheel;
                 output.wheel = GET_WHEEL_DELTA_WPARAM(event->mouseData);
@@ -47,7 +47,7 @@ LRESULT CALLBACK keyboard_proc(int code, WPARAM message, LPARAM data) {
             wabridge::input::Event output;
             output.type = wabridge::input::Type::Key;
             output.code = event->vkCode;
-            output.flags = (message == WM_KEYDOWN || message == WM_SYSKEYDOWN) ? 1 : 0;
+            output.flags = (message == WM_KEYDOWN || message == WM_SYSKEYDOWN) ? 1 : 2;
             output.modifiers = static_cast<std::uint16_t>(GetKeyState(VK_SHIFT) & 0x8000 ? 1 : 0) |
                                static_cast<std::uint16_t>(GetKeyState(VK_CONTROL) & 0x8000 ? 2 : 0) |
                                static_cast<std::uint16_t>(GetKeyState(VK_MENU) & 0x8000 ? 4 : 0);

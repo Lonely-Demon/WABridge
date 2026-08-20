@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 
 namespace wabridge::coordinator {
@@ -24,6 +25,8 @@ public:
     bool start(std::uint16_t port);
     void set_handler(std::uint8_t channel, session::Router::Handler handler);
     void set_feature_dispatcher(features::Dispatcher dispatcher);
+    bool send(const protocol::Envelope& envelope);
+    bool has_established_session() const noexcept;
     void stop() noexcept;
     bool running() const noexcept { return coordinator_.running(); }
     std::uint16_t port() const noexcept { return coordinator_.port(); }
@@ -38,6 +41,10 @@ private:
     session::Router router_;
     features::Dispatcher feature_dispatcher_;
     std::atomic<std::uint64_t> established_sessions_{0};
+    mutable std::mutex session_mutex_;
+    std::shared_ptr<net::Socket> active_socket_;
+    std::shared_ptr<tls::Stream> active_stream_;
+    std::shared_ptr<session::SessionPeer> active_peer_;
 };
 
 } // namespace wabridge::coordinator
