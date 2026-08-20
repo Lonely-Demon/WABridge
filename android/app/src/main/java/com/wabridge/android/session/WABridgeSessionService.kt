@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import com.wabridge.android.MainActivity
 import com.wabridge.android.discovery.NsdDiscovery
 import com.wabridge.android.pairing.AndroidIdentityStore
+import com.wabridge.android.input.AccessibilityInputBridge
 import com.wabridge.android.protocol.Envelope
 import com.wabridge.android.protocol.SessionHelloCodec
 import kotlinx.coroutines.CancellationException
@@ -40,12 +41,14 @@ class WABridgeSessionService : Service() {
     private var receiveJob: Job? = null
     private var pendingPeer: TlsSessionClient.Peer? = null
     private val router = SessionChannelRouter()
+    private val featureDispatcher = SessionFeatureDispatcher()
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         identity = AndroidIdentityStore(this)
         identity.ensureIdentity()
+        featureDispatcher.onInputEvent = { event -> AccessibilityInputBridge.dispatch(event) }
         sessions = SessionManager { state ->
             SessionRuntime.update(state, state.detail())
             updateNotification(state.detail())
@@ -160,8 +163,8 @@ class WABridgeSessionService : Service() {
                         session.sendEnvelope(Envelope(1, 0x0006, 0, envelope.requestId, byteArrayOf(1)))
                     } else if (envelope.channel == 1 && envelope.kind == 0x0007) {
                         break
-                    } else if (!router.dispatch(envelope)) {
-                        throw IllegalStateException("No handler for authenticated channel ${envelope.channel}")
+                    } else if (!router.dispatch(envelope) && !featureDispatcher.dispatch(envelope)) {
+                        throw IllegalStateException("No handler for authenticated feature frame ${envelope.channel}/${envelope.kind}")
                     }
                 }
             } catch (cancelled: CancellationException) {
