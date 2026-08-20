@@ -76,6 +76,13 @@ int main() {
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     REQUIRE(coordinator.established_sessions() == 1);
+    REQUIRE(client_peer.send({1, wabridge::messages::kHeartbeat, 0, 77, {1}}));
+    const auto heartbeat_ack = client_stream.read();
+    REQUIRE(heartbeat_ack.has_value());
+    REQUIRE(heartbeat_ack->channel == 1);
+    REQUIRE(heartbeat_ack->kind == wabridge::messages::kHeartbeatAck);
+    REQUIRE(heartbeat_ack->request_id == 77);
+    REQUIRE(heartbeat_ack->payload == std::vector<std::uint8_t>{1});
     client_peer.stop();
     coordinator.stop();
     coordinator.stop();
