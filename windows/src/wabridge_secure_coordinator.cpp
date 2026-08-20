@@ -19,6 +19,10 @@ bool SecureCoordinator::start(const std::uint16_t port) {
     return coordinator_.start(port);
 }
 
+void SecureCoordinator::set_handler(const std::uint8_t channel, session::Router::Handler handler) {
+    router_.set_handler(channel, std::move(handler));
+}
+
 void SecureCoordinator::stop() noexcept {
     coordinator_.stop();
 }
@@ -32,10 +36,8 @@ void SecureCoordinator::handle_socket(net::Socket socket) {
         session::SessionPeer peer(stream, messages::Role::Windows, messages::Role::Android);
         if (peer.establish(local_hello_)) {
             established_sessions_.fetch_add(1);
-            (void)peer.run([](const protocol::Envelope& envelope) {
-                // Feature routers attach here; bounds and channel validity have
-                // already been enforced by tls::Stream::read().
-                return envelope.channel >= 1 && envelope.channel <= 5;
+            (void)peer.run([this](const protocol::Envelope& envelope) {
+                return router_.dispatch(envelope);
             });
         }
     } catch (const tls::TlsError&) {

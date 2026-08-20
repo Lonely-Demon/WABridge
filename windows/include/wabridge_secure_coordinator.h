@@ -3,6 +3,7 @@
 #include "wabridge_coordinator.h"
 #include "wabridge_messages.h"
 #include "wabridge_session_peer.h"
+#include "wabridge_session_router.h"
 #include "wabridge_tls.h"
 
 #include <atomic>
@@ -20,6 +21,7 @@ public:
     SecureCoordinator& operator=(const SecureCoordinator&) = delete;
 
     bool start(std::uint16_t port);
+    void set_handler(std::uint8_t channel, session::Router::Handler handler);
     void stop() noexcept;
     bool running() const noexcept { return coordinator_.running(); }
     std::uint16_t port() const noexcept { return coordinator_.port(); }
@@ -31,6 +33,7 @@ private:
     tls::Context context_;
     messages::SessionHello local_hello_;
     Coordinator coordinator_;
+    session::Router router_;
     std::atomic<std::uint64_t> established_sessions_{0};
 };
 
