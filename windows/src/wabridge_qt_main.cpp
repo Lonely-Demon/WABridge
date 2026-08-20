@@ -1,4 +1,5 @@
 #include "wabridge_messages.h"
+#include "wabridge_feature_dispatch.h"
 #include "wabridge_identity.h"
 #include "wabridge_secure_coordinator.h"
 #include "wabridge_tls.h"
@@ -12,6 +13,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMainWindow>
+#include <QMetaObject>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
@@ -23,6 +25,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -95,6 +98,12 @@ public:
     ~CoordinatorWindow() override { stop_coordinator(); }
 
 private:
+    void set_status_async(QString text) {
+        QMetaObject::invokeMethod(this, [this, text = std::move(text)] {
+            status_->setText(text);
+        }, Qt::QueuedConnection);
+    }
+
     QWidget* with_browse(QLineEdit* field, const QString& title) {
         auto* container = new QWidget(this);
         auto* row = new QHBoxLayout(container);
@@ -144,6 +153,42 @@ private:
 
             auto context = wabridge::tls::Context::server(certificate, private_key, std::nullopt);
             auto coordinator = std::make_unique<wabridge::coordinator::SecureCoordinator>(std::move(context), std::move(hello));
+            wabridge::features::Dispatcher feature_dispatcher;
+            feature_dispatcher.on_file_offer = [this](const wabridge::file::Offer& offer) {
+                set_status_async(QString("Incoming file offer: %1 (%2 bytes)")
+                                     .arg(QString::fromStdString(offer.display_name))
+                                     .arg(static_cast<qulonglong>(offer.size)));
+                return true;
+            };
+            feature_dispatcher.on_file_chunk = [this](const wabridge::file::Chunk& chunk) {
+                set_status_async(QString("Incoming file chunk: offset %1, %2 bytes")
+                                     .arg(static_cast<qulonglong>(chunk.offset))
+                                     .arg(static_cast<qulonglong>(chunk.data.size())));
+                return true;
+            };
+            feature_dispatcher.on_clipboard_update = [this](const wabridge::clipboard::Update& update) {
+                set_status_async(QString("Clipboard update from %1 (%2 characters)")
+                                     .arg(QString::fromStdString(update.origin_device_id))
+                                     .arg(static_cast<qulonglong>(update.text.size())));
+                return true;
+            };
+            feature_dispatcher.on_audio_frame = [this](const wabridge::audio::Frame& frame) {
+                set_status_async(QString("Audio frame received: %1 bytes at %2 Hz")
+                                     .arg(static_cast<qulonglong>(frame.data.size()))
+                                     .arg(frame.sample_rate));
+                return true;
+            };
+            feature_dispatcher.on_input_event = [this](const wabridge::input::Event&) {
+                set_status_async("Phone-control input event received");
+                return true;
+            };
+            feature_dispatcher.on_display_command = [this](const wabridge::display::Command& command) {
+                set_status_async(QString("Display mode command received: mode %1, sequence %2")
+                                     .arg(static_cast<int>(command.mode))
+                                     .arg(command.sequence));
+                return true;
+            };
+            coordinator->set_feature_dispatcher(std::move(feature_dispatcher));
             if (!coordinator->start(static_cast<std::uint16_t>(port_->value()))) {
                 status_->setText("Unable to bind the requested TCP port");
                 return;
