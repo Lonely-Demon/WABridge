@@ -1,3 +1,4 @@
+#include "test_require.h"
 #include "wabridge_file.h"
 #include "wabridge_envelope.h"
 
@@ -21,21 +22,21 @@ int main() {
     offer.display_name = "../photo.jpg";
     offer.mime_type = "image/jpeg";
     const auto decoded_offer = decode_offer(encode_offer(offer));
-    assert(decoded_offer.size == offer.size);
-    assert(decoded_offer.display_name == "_.._photo.jpg");
-    assert(decoded_offer.mime_type == offer.mime_type);
+    REQUIRE(decoded_offer.size == offer.size);
+    REQUIRE(decoded_offer.display_name == ".._photo.jpg");
+    REQUIRE(decoded_offer.mime_type == offer.mime_type);
 
     Chunk chunk;
     chunk.transfer_id = offer.transfer_id;
     chunk.offset = 4096;
     chunk.data.assign(512, 0xAB);
     const auto decoded_chunk = decode_chunk(encode_chunk(chunk));
-    assert(decoded_chunk.transfer_id == chunk.transfer_id);
-    assert(decoded_chunk.offset == chunk.offset);
-    assert(decoded_chunk.data == chunk.data);
+    REQUIRE(decoded_chunk.transfer_id == chunk.transfer_id);
+    REQUIRE(decoded_chunk.offset == chunk.offset);
+    REQUIRE(decoded_chunk.data == chunk.data);
 
-    assert(safe_display_name("report.txt") == "report.txt");
-    assert(safe_display_name("a:b\\c/d") == "a_b_c_d");
+    REQUIRE(safe_display_name("report.txt") == "report.txt");
+    REQUIRE(safe_display_name("a:b\\c/d") == "a_b_c_d");
 
     auto malformed = encode_chunk(chunk);
     malformed[24] = 0xFF;
@@ -45,7 +46,7 @@ int main() {
     } catch (const ProtocolError&) {
         rejected = true;
     }
-    assert(rejected);
+    REQUIRE(rejected);
 
     chunk.data.assign(1024 * 1024 + 1, 0);
     rejected = false;
@@ -54,7 +55,7 @@ int main() {
     } catch (const ProtocolError&) {
         rejected = true;
     }
-    assert(rejected);
+    REQUIRE(rejected);
 
     std::cout << "File-transfer protocol tests passed\n";
     return 0;

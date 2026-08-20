@@ -1,3 +1,4 @@
+#include "test_require.h"
 #include "wabridge_session.h"
 
 #include <cassert>
@@ -9,28 +10,28 @@ using wabridge::session::StateMachine;
 
 int main() {
     StateMachine machine;
-    assert(machine.state() == State::Idle);
-    assert(!machine.apply(Event::CandidateFound));
+    REQUIRE(machine.state() == State::Idle);
+    REQUIRE(!machine.apply(Event::CandidateFound));
 
-    assert(machine.apply(Event::BeginDiscovery));
-    assert(machine.apply(Event::CandidateFound));
-    assert(machine.apply(Event::TlsStarted));
-    assert(machine.apply(Event::TlsSucceeded));
-    assert(machine.apply(Event::PairingNeeded));
-    assert(machine.state() == State::PairingRequired);
-    assert(machine.apply(Event::PairingApproved));
-    assert(machine.state() == State::Established);
+    REQUIRE(machine.apply(Event::BeginDiscovery));
+    REQUIRE(machine.apply(Event::CandidateFound));
+    REQUIRE(machine.apply(Event::TlsStarted));
+    REQUIRE(machine.apply(Event::TlsSucceeded));
+    REQUIRE(machine.apply(Event::PairingNeeded));
+    REQUIRE(machine.state() == State::PairingRequired);
+    REQUIRE(machine.apply(Event::PairingApproved));
+    REQUIRE(machine.state() == State::Established);
 
     machine.stop();
-    assert(machine.state() == State::Closing);
+    REQUIRE(machine.state() == State::Closing);
     machine.stop();
-    assert(machine.state() == State::Closing);
-    assert(machine.apply(Event::Closed));
-    assert(machine.state() == State::Idle);
-    assert(machine.stopped());
+    REQUIRE(machine.state() == State::Closing);
+    REQUIRE(machine.apply(Event::Closed));
+    REQUIRE(machine.state() == State::Idle);
+    REQUIRE(machine.stopped());
 
-    assert(machine.apply(Event::BeginDiscovery));
-    assert(machine.state() == State::Discovering);
+    REQUIRE(machine.apply(Event::BeginDiscovery));
+    REQUIRE(machine.state() == State::Discovering);
 
     std::cout << "C++ session tests passed\n";
     return 0;

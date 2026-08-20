@@ -1,3 +1,4 @@
+#include "test_require.h"
 #include "wabridge_socket.h"
 
 #include <cassert>
@@ -15,14 +16,14 @@
 int main() {
     wabridge::net::Runtime runtime;
     auto listener = wabridge::net::Socket::listen(0);
-    assert(listener.has_value());
+    REQUIRE(listener.has_value());
     const auto port = listener->local_port();
-    assert(port != 0);
+    REQUIRE(port != 0);
 
     bool accepted = false;
     std::thread server([&] {
         auto peer = listener->accept();
-        assert(peer.has_value());
+        REQUIRE(peer.has_value());
         const char expected[] = "wab";
         char received[sizeof(expected)]{};
 #ifdef _WIN32
@@ -30,23 +31,23 @@ int main() {
 #else
         const auto result = recv(peer->native(), received, sizeof(expected), 0);
 #endif
-        assert(result == static_cast<int>(sizeof(expected)));
-        assert(std::memcmp(received, expected, sizeof(expected)) == 0);
+        REQUIRE(result == static_cast<int>(sizeof(expected)));
+        REQUIRE(std::memcmp(received, expected, sizeof(expected)) == 0);
         accepted = true;
     });
 
     auto client = wabridge::net::Socket::connect("127.0.0.1", port);
-    assert(client.has_value());
+    REQUIRE(client.has_value());
     const char payload[] = "wab";
 #ifdef _WIN32
-    assert(send(client->native(), payload, sizeof(payload), 0) == static_cast<int>(sizeof(payload)));
+    REQUIRE(send(client->native(), payload, sizeof(payload), 0) == static_cast<int>(sizeof(payload)));
 #else
-    assert(send(client->native(), payload, sizeof(payload), 0) == static_cast<ssize_t>(sizeof(payload)));
+    REQUIRE(send(client->native(), payload, sizeof(payload), 0) == static_cast<ssize_t>(sizeof(payload)));
 #endif
     client->close();
     client->close();
     server.join();
-    assert(accepted);
+    REQUIRE(accepted);
 
     std::cout << "Socket loopback tests passed\n";
     return 0;

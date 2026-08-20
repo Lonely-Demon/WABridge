@@ -1,3 +1,4 @@
+#include "test_require.h"
 #include "wabridge_envelope.h"
 
 #include <cassert>
@@ -20,7 +21,7 @@ void expect_error(const std::vector<std::uint8_t>& frame) {
     } catch (const ProtocolError&) {
         failed = true;
     }
-    assert(failed);
+    REQUIRE(failed);
 }
 
 void put_u32(std::vector<std::uint8_t>& frame, const std::size_t at, const std::uint32_t value) {
@@ -36,11 +37,11 @@ int main() {
     const Envelope original{1, 1, 1, 42, {'h', 'e', 'l', 'l', 'o'}};
     const auto encoded = encode(original);
     const auto decoded = decode(encoded);
-    assert(decoded.channel == original.channel);
-    assert(decoded.kind == original.kind);
-    assert(decoded.flags == original.flags);
-    assert(decoded.request_id == original.request_id);
-    assert(decoded.payload == original.payload);
+    REQUIRE(decoded.channel == original.channel);
+    REQUIRE(decoded.kind == original.kind);
+    REQUIRE(decoded.flags == original.flags);
+    REQUIRE(decoded.request_id == original.request_id);
+    REQUIRE(decoded.payload == original.payload);
 
     auto bad_magic = encoded;
     bad_magic[0] = 0;

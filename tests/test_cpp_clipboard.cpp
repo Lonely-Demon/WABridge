@@ -1,3 +1,4 @@
+#include "test_require.h"
 #include "wabridge_clipboard.h"
 #include "wabridge_envelope.h"
 
@@ -17,19 +18,19 @@ int main() {
     update.timestamp_ms = 123456;
     update.text = "clipboard from WABridge";
     const auto decoded = decode(encode(update));
-    assert(decoded.loop_token == update.loop_token);
-    assert(decoded.origin_device_id == update.origin_device_id);
-    assert(decoded.timestamp_ms == update.timestamp_ms);
-    assert(decoded.text == update.text);
+    REQUIRE(decoded.loop_token == update.loop_token);
+    REQUIRE(decoded.origin_device_id == update.origin_device_id);
+    REQUIRE(decoded.timestamp_ms == update.timestamp_ms);
+    REQUIRE(decoded.text == update.text);
 
     LoopGuard guard;
-    assert(guard.should_apply(update.loop_token));
-    assert(!guard.should_apply(update.loop_token));
+    REQUIRE(guard.should_apply(update.loop_token));
+    REQUIRE(!guard.should_apply(update.loop_token));
     std::array<std::uint8_t, 16> other{};
     other.fill(0x55);
-    assert(guard.should_apply(other));
+    REQUIRE(guard.should_apply(other));
     guard.mark_local(update.loop_token);
-    assert(!guard.should_apply(update.loop_token));
+    REQUIRE(!guard.should_apply(update.loop_token));
 
     update.timestamp_ms = 0;
     bool rejected = false;
@@ -38,7 +39,7 @@ int main() {
     } catch (const ProtocolError&) {
         rejected = true;
     }
-    assert(rejected);
+    REQUIRE(rejected);
 
     update.timestamp_ms = 1;
     update.text.assign(1024 * 1024 + 1, 'x');
@@ -48,7 +49,7 @@ int main() {
     } catch (const ProtocolError&) {
         rejected = true;
     }
-    assert(rejected);
+    REQUIRE(rejected);
 
     std::cout << "Clipboard protocol tests passed\n";
     return 0;

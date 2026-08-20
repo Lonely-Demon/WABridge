@@ -1,3 +1,4 @@
+#include "test_require.h"
 #include "wabridge_messages.h"
 #include "wabridge_envelope.h"
 
@@ -21,14 +22,14 @@ int main() {
 
     const auto encoded = encode_session_hello(hello);
     const auto decoded = decode_session_hello(encoded);
-    assert(decoded.role == hello.role);
-    assert(decoded.session_nonce == hello.session_nonce);
-    assert(decoded.device_id == hello.device_id);
-    assert(decoded.capabilities_hash == hello.capabilities_hash);
-    assert(decoded.max_frame == hello.max_frame);
+    REQUIRE(decoded.role == hello.role);
+    REQUIRE(decoded.session_nonce == hello.session_nonce);
+    REQUIRE(decoded.device_id == hello.device_id);
+    REQUIRE(decoded.capabilities_hash == hello.capabilities_hash);
+    REQUIRE(decoded.max_frame == hello.max_frame);
 
     const auto second_nonce = fresh_session_nonce();
-    assert(second_nonce != hello.session_nonce);
+    REQUIRE(second_nonce != hello.session_nonce);
 
     auto malformed = encoded;
     malformed.pop_back();
@@ -38,7 +39,7 @@ int main() {
     } catch (const ProtocolError&) {
         rejected = true;
     }
-    assert(rejected);
+    REQUIRE(rejected);
 
     hello.device_id.assign(65, 'x');
     rejected = false;
@@ -47,7 +48,7 @@ int main() {
     } catch (const ProtocolError&) {
         rejected = true;
     }
-    assert(rejected);
+    REQUIRE(rejected);
 
     std::cout << "SESSION_HELLO tests passed\n";
     return 0;

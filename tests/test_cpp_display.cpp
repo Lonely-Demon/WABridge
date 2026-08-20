@@ -1,3 +1,4 @@
+#include "test_require.h"
 #include "wabridge_display.h"
 #include "wabridge_envelope.h"
 
@@ -14,19 +15,19 @@ using wabridge::protocol::ProtocolError;
 int main() {
     const Command command{Mode::PhoneControl, false, 7};
     const auto decoded = decode(encode(command));
-    assert(decoded.mode == command.mode);
-    assert(decoded.suspended == command.suspended);
-    assert(decoded.sequence == command.sequence);
+    REQUIRE(decoded.mode == command.mode);
+    REQUIRE(decoded.suspended == command.suspended);
+    REQUIRE(decoded.sequence == command.sequence);
 
     SuspendController controller;
-    assert(!controller.suspended());
-    assert(controller.toggle());
-    assert(controller.suspended());
-    assert(!controller.toggle());
-    assert(!controller.suspended());
+    REQUIRE(!controller.suspended());
+    REQUIRE(controller.toggle());
+    REQUIRE(controller.suspended());
+    REQUIRE(!controller.toggle());
+    REQUIRE(!controller.suspended());
     controller.reset();
     controller.reset();
-    assert(!controller.suspended());
+    REQUIRE(!controller.suspended());
 
     bool rejected = false;
     try {
@@ -34,7 +35,7 @@ int main() {
     } catch (const ProtocolError&) {
         rejected = true;
     }
-    assert(rejected);
+    REQUIRE(rejected);
 
     rejected = false;
     try {
@@ -42,7 +43,7 @@ int main() {
     } catch (const ProtocolError&) {
         rejected = true;
     }
-    assert(rejected);
+    REQUIRE(rejected);
 
     std::cout << "Display-control protocol tests passed\n";
     return 0;
