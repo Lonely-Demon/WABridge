@@ -29,6 +29,7 @@ add_library(wabridge_protocol STATIC
     src/wabridge_session_router.cpp
     src/wabridge_feature_dispatch.cpp
     src/wabridge_wasapi_audio.cpp
+    src/wabridge_input_capture.cpp
 )
 target_include_directories(wabridge_protocol PUBLIC include)
 target_link_libraries(wabridge_protocol PUBLIC OpenSSL::SSL OpenSSL::Crypto)
@@ -120,6 +121,9 @@ target_link_libraries(wabridge_feature_dispatch_test PRIVATE wabridge_protocol)
 add_executable(wabridge_wasapi_audio_test ../tests/test_cpp_wasapi_audio.cpp)
 target_link_libraries(wabridge_wasapi_audio_test PRIVATE wabridge_protocol)
 
+add_executable(wabridge_input_capture_test ../tests/test_cpp_input_capture.cpp)
+target_link_libraries(wabridge_input_capture_test PRIVATE wabridge_protocol)
+
 if (NOT MSVC)
     target_link_libraries(wabridge_tls_stream_test PRIVATE pthread)
 endif()
@@ -148,3 +152,4 @@ add_test(NAME wabridge_identity_test COMMAND $<TARGET_FILE:wabridge_identity_tes
 add_test(NAME wabridge_session_router_test COMMAND $<TARGET_FILE:wabridge_session_router_test>)
 add_test(NAME wabridge_feature_dispatch_test COMMAND $<TARGET_FILE:wabridge_feature_dispatch_test>)
 add_test(NAME wabridge_wasapi_audio_test COMMAND $<TARGET_FILE:wabridge_wasapi_audio_test>)
+add_test(NAME wabridge_input_capture_test COMMAND $<TARGET_FILE:wabridge_input_capture_test>)
