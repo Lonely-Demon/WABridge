@@ -16,12 +16,12 @@ bool SessionPeer::establish(const messages::SessionHello& local_hello) {
     }
     try {
         const auto local_payload = messages::encode_session_hello(local_hello);
-        if (!stream_.write({1, 1, 1, 1, local_payload})) {
+        if (!stream_.write({1, messages::kSessionHello, 1, 1, local_payload})) {
             stop();
             return false;
         }
         const auto received = stream_.read();
-        if (!received.has_value() || received->channel != 1 || received->kind != 1 || received->request_id == 0) {
+        if (!received.has_value() || received->channel != 1 || received->kind != messages::kSessionHello || received->request_id == 0) {
             stop();
             return false;
         }
@@ -37,6 +37,11 @@ bool SessionPeer::establish(const messages::SessionHello& local_hello) {
         stop();
         return false;
     }
+}
+
+bool SessionPeer::send(const protocol::Envelope& envelope) {
+    if (!established_) return false;
+    return stream_.write(envelope);
 }
 
 bool SessionPeer::run(const std::function<bool(const protocol::Envelope&)>& handler) {

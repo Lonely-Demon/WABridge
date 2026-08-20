@@ -7,6 +7,15 @@
 
 namespace wabridge::messages {
 
+constexpr std::uint16_t kSessionHello = 0x0001;
+constexpr std::uint16_t kCapabilities = 0x0002;
+constexpr std::uint16_t kPairingStatus = 0x0003;
+constexpr std::uint16_t kSasConfirmation = 0x0004;
+constexpr std::uint16_t kHeartbeat = 0x0005;
+constexpr std::uint16_t kHeartbeatAck = 0x0006;
+constexpr std::uint16_t kSessionClose = 0x0007;
+constexpr std::uint16_t kError = 0x0008;
+
 enum class Role : std::uint8_t { Windows = 1, Android = 2 };
 
 struct SessionHello {

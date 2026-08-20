@@ -16,6 +16,7 @@ public:
 
     bool establish(const messages::SessionHello& local_hello);
     bool run(const std::function<bool(const protocol::Envelope&)>& handler);
+    bool send(const protocol::Envelope& envelope);
     const std::optional<messages::SessionHello>& peer_hello() const noexcept { return peer_hello_; }
     bool established() const noexcept { return established_; }
     void stop() noexcept;
