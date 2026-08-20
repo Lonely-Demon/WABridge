@@ -66,6 +66,7 @@ class TlsSessionClient(
             )
             sendEnvelope(Envelope(1, 1, 1, 1L, SessionHelloCodec.encode(hello)))
             val peerHello = readHello()
+            connected.soTimeout = 0
             Peer(peerCertificate, PinnedTls.fingerprint(peerCertificate), peerHello)
         } catch (error: Throwable) {
             stop()

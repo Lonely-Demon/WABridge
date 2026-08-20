@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import com.wabridge.android.MainActivity
 import com.wabridge.android.discovery.NsdDiscovery
 import com.wabridge.android.pairing.AndroidIdentityStore
+import com.wabridge.android.protocol.Envelope
 import com.wabridge.android.protocol.SessionHelloCodec
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -36,7 +37,9 @@ class WABridgeSessionService : Service() {
     private var discovery: NsdDiscovery? = null
     private var client: TlsSessionClient? = null
     private var connectJob: Job? = null
+    private var receiveJob: Job? = null
     private var pendingPeer: TlsSessionClient.Peer? = null
+    private val router = SessionChannelRouter()
 
     override fun onCreate() {
         super.onCreate()
@@ -119,6 +122,7 @@ class WABridgeSessionService : Service() {
                 if (!firstPair && expectedFingerprint == peer.fingerprint) {
                     sessions.apply(SessionEvent.IDENTITY_MATCHES)
                     SessionRuntime.update(SessionState.ESTABLISHED, "Securely connected to ${peer.hello.deviceId}")
+                    startReceiveLoop(session)
                 } else {
                     pendingPeer = peer
                     sessions.apply(SessionEvent.PAIRING_NEEDED)
@@ -143,6 +147,29 @@ class WABridgeSessionService : Service() {
         SessionRuntime.clearPairing()
         sessions.apply(SessionEvent.PAIRING_APPROVED)
         SessionRuntime.update(SessionState.ESTABLISHED, "Securely connected to ${peer.hello.deviceId}")
+        client?.let(::startReceiveLoop)
+    }
+
+    private fun startReceiveLoop(session: TlsSessionClient) {
+        if (receiveJob?.isActive == true) return
+        receiveJob = scope.launch(Dispatchers.IO) {
+            try {
+                while (!destroyed.get()) {
+                    val envelope = session.readEnvelope()
+                    if (envelope.channel == 1 && envelope.kind == 0x0005) {
+                        session.sendEnvelope(Envelope(1, 0x0006, 0, envelope.requestId, byteArrayOf(1)))
+                    } else if (envelope.channel == 1 && envelope.kind == 0x0007) {
+                        break
+                    } else if (!router.dispatch(envelope)) {
+                        throw IllegalStateException("No handler for authenticated channel ${envelope.channel}")
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                if (!destroyed.get()) fail("Session receive failed: ${error.message ?: error.javaClass.simpleName}")
+            }
+        }
     }
 
     private fun fail(detail: String) {
@@ -156,6 +183,8 @@ class WABridgeSessionService : Service() {
         if (!destroyed.compareAndSet(false, true)) return
         connectJob?.cancel()
         connectJob = null
+        receiveJob?.cancel()
+        receiveJob = null
         discovery?.stop()
         discovery = null
         client?.stop()
