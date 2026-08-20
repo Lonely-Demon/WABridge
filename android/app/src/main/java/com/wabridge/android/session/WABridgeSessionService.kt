@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import com.wabridge.android.MainActivity
 import com.wabridge.android.discovery.NsdDiscovery
 import com.wabridge.android.pairing.AndroidIdentityStore
+import com.wabridge.android.audio.AudioPlayback
 import com.wabridge.android.input.AccessibilityInputBridge
 import com.wabridge.android.protocol.Envelope
 import com.wabridge.android.protocol.SessionHelloCodec
@@ -42,6 +43,7 @@ class WABridgeSessionService : Service() {
     private var pendingPeer: TlsSessionClient.Peer? = null
     private val router = SessionChannelRouter()
     private val featureDispatcher = SessionFeatureDispatcher()
+    private val audioPlayback = AudioPlayback()
 
     override fun onCreate() {
         super.onCreate()
@@ -49,6 +51,7 @@ class WABridgeSessionService : Service() {
         identity = AndroidIdentityStore(this)
         identity.ensureIdentity()
         featureDispatcher.onInputEvent = { event -> AccessibilityInputBridge.dispatch(event) }
+        featureDispatcher.onAudioFrame = { frame -> audioPlayback.play(frame) }
         sessions = SessionManager { state ->
             SessionRuntime.update(state, state.detail())
             updateNotification(state.detail())
@@ -192,6 +195,7 @@ class WABridgeSessionService : Service() {
         discovery = null
         client?.stop()
         client = null
+        audioPlayback.stop()
         pendingPeer = null
         sessions.stop()
         SessionRuntime.reset()
