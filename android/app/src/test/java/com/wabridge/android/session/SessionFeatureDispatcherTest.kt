@@ -10,6 +10,9 @@ import com.wabridge.android.file.FileOffer
 import com.wabridge.android.input.InputEvent
 import com.wabridge.android.input.InputEventCodec
 import com.wabridge.android.input.InputEventType
+import com.wabridge.android.display.DisplayCommand
+import com.wabridge.android.display.DisplayCommandCodec
+import com.wabridge.android.display.DisplayMode
 import com.wabridge.android.protocol.Envelope
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -23,10 +26,12 @@ class SessionFeatureDispatcherTest {
         var clipboardSeen = false
         var audioSeen = false
         var inputSeen = false
+        var displaySeen = false
         dispatcher.onFileOffer = { fileSeen = it.displayName == "note.txt"; fileSeen }
         dispatcher.onClipboardUpdate = { clipboardSeen = it.text == "hello"; clipboardSeen }
         dispatcher.onAudioFrame = { audioSeen = it.data.size == 4; audioSeen }
         dispatcher.onInputEvent = { inputSeen = it.type == InputEventType.KEY; inputSeen }
+        dispatcher.onDisplayCommand = { displaySeen = it.mode == DisplayMode.PHONE_CONTROL; displaySeen }
 
         val offer = FileOffer(ByteArray(16) { 1 }, 4, ByteArray(32), "note.txt", "text/plain")
         assertTrue(dispatcher.dispatch(Envelope(3, SessionFeatureDispatcher.KIND_FILE_OFFER, 0, 1, FileCodec.encodeOffer(offer))))
@@ -43,6 +48,10 @@ class SessionFeatureDispatcherTest {
         val input = InputEvent(InputEventType.KEY, 1, 0, 0, 0, 0, 0x41, 0)
         assertTrue(dispatcher.dispatch(Envelope(1, SessionFeatureDispatcher.KIND_INPUT_EVENT, 0, 4, InputEventCodec.encode(input))))
         assertTrue(inputSeen)
+
+        val display = DisplayCommand(DisplayMode.PHONE_CONTROL, true, 5)
+        assertTrue(dispatcher.dispatch(Envelope(1, SessionFeatureDispatcher.KIND_DISPLAY_COMMAND, 0, 5, DisplayCommandCodec.encode(display))))
+        assertTrue(displaySeen)
     }
 
     @Test

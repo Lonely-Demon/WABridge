@@ -7,6 +7,8 @@ import com.wabridge.android.clipboard.ClipboardUpdate
 import com.wabridge.android.file.FileChunk
 import com.wabridge.android.file.FileCodec
 import com.wabridge.android.file.FileOffer
+import com.wabridge.android.display.DisplayCommand
+import com.wabridge.android.display.DisplayCommandCodec
 import com.wabridge.android.input.InputEvent
 import com.wabridge.android.input.InputEventCodec
 import com.wabridge.android.protocol.Envelope
@@ -18,13 +20,14 @@ class SessionFeatureDispatcher {
     var onClipboardUpdate: ((ClipboardUpdate) -> Boolean)? = null
     var onAudioFrame: ((AudioFrame) -> Boolean)? = null
     var onInputEvent: ((InputEvent) -> Boolean)? = null
+    var onDisplayCommand: ((DisplayCommand) -> Boolean)? = null
 
     fun dispatch(envelope: Envelope): Boolean = try {
         when (envelope.channel) {
-            1 -> if (envelope.kind == KIND_INPUT_EVENT) {
-                onInputEvent?.invoke(InputEventCodec.decode(envelope.payload)) == true
-            } else {
-                false
+            1 -> when (envelope.kind) {
+                KIND_INPUT_EVENT -> onInputEvent?.invoke(InputEventCodec.decode(envelope.payload)) == true
+                KIND_DISPLAY_COMMAND -> onDisplayCommand?.invoke(DisplayCommandCodec.decode(envelope.payload)) == true
+                else -> false
             }
             3 -> when (envelope.kind) {
                 KIND_FILE_OFFER -> onFileOffer?.invoke(FileCodec.decodeOffer(envelope.payload)) == true
@@ -55,5 +58,6 @@ class SessionFeatureDispatcher {
         const val KIND_CLIPBOARD_UPDATE = 0x0001
         const val KIND_AUDIO_FRAME = 0x0001
         const val KIND_INPUT_EVENT = 0x0102
+        const val KIND_DISPLAY_COMMAND = 0x0101
     }
 }
