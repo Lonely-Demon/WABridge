@@ -64,7 +64,7 @@ class TlsSessionClient(
                 capabilitiesHash.copyOf(),
                 4 * 1024 * 1024,
             )
-            send(Envelope(1, 1, 1, 1L, SessionHelloCodec.encode(hello)))
+            sendEnvelope(Envelope(1, 1, 1, 1L, SessionHelloCodec.encode(hello)))
             val peerHello = readHello()
             Peer(peerCertificate, PinnedTls.fingerprint(peerCertificate), peerHello)
         } catch (error: Throwable) {
@@ -73,10 +73,32 @@ class TlsSessionClient(
         }
     }
 
-    private fun send(envelope: Envelope) {
+    @Synchronized
+    fun sendEnvelope(envelope: Envelope) {
         val destination = output ?: throw IllegalStateException("WABridge session is not connected")
         destination.write(EnvelopeCodec.encode(envelope))
         destination.flush()
+    }
+
+    @Synchronized
+    fun readEnvelope(): Envelope {
+        val source = input ?: throw IllegalStateException("WABridge session is not connected")
+        val header = ByteArray(20)
+        source.readFully(header)
+        val channel = header[3].toInt() and 0xff
+        val limit = when (channel) {
+            1 -> 64 * 1024
+            2 -> 4 * 1024 * 1024
+            3, 4 -> 1 * 1024 * 1024
+            5 -> 256 * 1024
+            else -> throw ProtocolException("unknown channel")
+        }
+        val length = ((header[16].toInt() and 0xff) shl 24) or
+            ((header[17].toInt() and 0xff) shl 16) or
+            ((header[18].toInt() and 0xff) shl 8) or
+            (header[19].toInt() and 0xff)
+        if (length <= 0 || length > limit) throw ProtocolException("invalid envelope length")
+        return EnvelopeCodec.decode(header + ByteArray(length).also(source::readFully))
     }
 
     private fun readHello(): SessionHello {
