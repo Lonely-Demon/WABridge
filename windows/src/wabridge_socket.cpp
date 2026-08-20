@@ -99,7 +99,7 @@ std::optional<Socket> Socket::connect(const std::string_view host, const std::ui
 std::optional<Socket> Socket::listen(const std::uint16_t port) {
     addrinfo hints{};
     hints.ai_socktype = SOCK_STREAM;
-    hints.ai_family = AF_INET6;
+    hints.ai_family = AF_UNSPEC;
     hints.ai_flags = AI_PASSIVE;
     hints.ai_protocol = IPPROTO_TCP;
     const auto port_text = std::to_string(port);
@@ -111,6 +111,21 @@ std::optional<Socket> Socket::listen(const std::uint16_t port) {
         const auto candidate = ::socket(current->ai_family, current->ai_socktype, current->ai_protocol);
         if (candidate == kInvalidSocket) continue;
         set_reuse_address(candidate);
+        if (current->ai_family == AF_INET6) {
+            int v6_only = 0;
+#ifdef _WIN32
+            const auto option_result = setsockopt(candidate, IPPROTO_IPV6, IPV6_V6ONLY,
+                                                   reinterpret_cast<const char*>(&v6_only),
+                                                   sizeof(v6_only));
+#else
+            const auto option_result = setsockopt(candidate, IPPROTO_IPV6, IPV6_V6ONLY,
+                                                   &v6_only, sizeof(v6_only));
+#endif
+            if (option_result != 0) {
+                close_native(candidate);
+                continue;
+            }
+        }
         if (::bind(candidate, current->ai_addr, static_cast<int>(current->ai_addrlen)) == 0 &&
             ::listen(candidate, 1) == 0) {
             result.socket_ = candidate;
