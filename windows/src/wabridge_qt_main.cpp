@@ -1,4 +1,5 @@
 #include "wabridge_messages.h"
+#include "wabridge_identity.h"
 #include "wabridge_secure_coordinator.h"
 #include "wabridge_tls.h"
 
@@ -44,8 +45,8 @@ public:
 
         cert_path_ = new QLineEdit(root);
         key_path_ = new QLineEdit(root);
-        cert_path_->setPlaceholderText("PEM certificate path");
-        key_path_->setPlaceholderText("PEM private-key path");
+        cert_path_->setPlaceholderText("Optional PEM certificate override");
+        key_path_->setPlaceholderText("Optional PEM private-key override");
         form->addRow("Device certificate:", with_browse(cert_path_, "Select certificate"));
         form->addRow("Private key:", with_browse(key_path_, "Select private key"));
 
@@ -55,7 +56,7 @@ public:
         form->addRow("TCP port:", port_);
         layout->addLayout(form);
 
-        status_ = new QLabel("Not running — configure a certificate and private key", root);
+        status_ = new QLabel("Not running — a DPAPI-protected device identity will be created automatically", root);
         status_->setWordWrap(true);
         layout->addWidget(status_);
 
@@ -69,6 +70,7 @@ public:
 
         auto* note = new QLabel(
             "WABridge uses TLS 1.3 and mutual certificate authentication. "
+            "The default identity is stored with Windows DPAPI; PEM fields are optional test overrides. "
             "A first-pair connection remains pending until the device identities are compared.",
             root);
         note->setWordWrap(true);
@@ -108,14 +110,29 @@ private:
     }
 
     void start_coordinator() {
-        const std::string certificate = read_file(cert_path_->text());
-        const std::string private_key = read_file(key_path_->text());
-        if (certificate.empty() || private_key.empty()) {
-            QMessageBox::warning(this, "WABridge", "Both a readable PEM certificate and private key are required.");
-            return;
-        }
+        try {
+            std::string certificate;
+            std::string private_key;
+            std::string fingerprint;
+            if (cert_path_->text().isEmpty() && key_path_->text().isEmpty()) {
+                const auto material = wabridge::identity::Store().load_or_create();
+                certificate = material.certificate_pem;
+                private_key = material.private_key_pem;
+                fingerprint = material.fingerprint;
+            } else {
+                if (cert_path_->text().isEmpty() || key_path_->text().isEmpty()) {
+                    QMessageBox::warning(this, "WABridge", "Provide both PEM override paths, or leave both empty for the DPAPI identity.");
+                    return;
+                }
+                certificate = read_file(cert_path_->text());
+                private_key = read_file(key_path_->text());
+                if (certificate.empty() || private_key.empty()) {
+                    QMessageBox::warning(this, "WABridge", "The PEM override files are not readable.");
+                    return;
+                }
+            }
 
-        const QByteArray capability_bytes = QCryptographicHash::hash(
+            const QByteArray capability_bytes = QCryptographicHash::hash(
             QByteArrayLiteral("windows-coordinator-v1"), QCryptographicHash::Sha256);
         wabridge::messages::SessionHello hello;
         hello.role = wabridge::messages::Role::Windows;
@@ -125,7 +142,6 @@ private:
         std::copy(capability_bytes.cbegin(), capability_bytes.cend(), hello.capabilities_hash.begin());
         hello.max_frame = 4U * 1024U * 1024U;
 
-        try {
             auto context = wabridge::tls::Context::server(certificate, private_key, std::nullopt);
             auto coordinator = std::make_unique<wabridge::coordinator::SecureCoordinator>(std::move(context), std::move(hello));
             if (!coordinator->start(static_cast<std::uint16_t>(port_->value()))) {
@@ -135,9 +151,10 @@ private:
             coordinator_ = std::move(coordinator);
             start_->setEnabled(false);
             stop_->setEnabled(true);
-            status_->setText(QString("Listening on TCP port %1 — awaiting Android")
-                                 .arg(coordinator_->port()));
-        } catch (const std::exception& error) {
+            status_->setText(QString("Listening on TCP port %1 — awaiting Android%s")
+                                 .arg(coordinator_->port())
+                                 .arg(fingerprint.empty() ? QString() : QString(" — identity %1").arg(QString::fromStdString(fingerprint))));
+    } catch (const std::exception& error) {
             status_->setText(QString("Secure coordinator failed: %1").arg(error.what()));
             coordinator_.reset();
         }

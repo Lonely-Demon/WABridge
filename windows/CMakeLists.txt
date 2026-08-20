@@ -25,11 +25,12 @@ add_library(wabridge_protocol STATIC
     src/wabridge_secure_coordinator.cpp
     src/wabridge_audio.cpp
     src/wabridge_input.cpp
+    src/wabridge_identity.cpp
 )
 target_include_directories(wabridge_protocol PUBLIC include)
 target_link_libraries(wabridge_protocol PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 if (WIN32)
-    target_link_libraries(wabridge_protocol PUBLIC ws2_32)
+    target_link_libraries(wabridge_protocol PUBLIC ws2_32 crypt32)
 endif()
 
 option(WABRIDGE_BUILD_QT_WINDOWS "Build the Windows Qt6 coordinator application" OFF)
@@ -104,6 +105,9 @@ target_link_libraries(wabridge_audio_test PRIVATE wabridge_protocol)
 add_executable(wabridge_input_test ../tests/test_cpp_input.cpp)
 target_link_libraries(wabridge_input_test PRIVATE wabridge_protocol)
 
+add_executable(wabridge_identity_test ../tests/test_cpp_identity.cpp)
+target_link_libraries(wabridge_identity_test PRIVATE wabridge_protocol)
+
 if (NOT MSVC)
     target_link_libraries(wabridge_tls_stream_test PRIVATE pthread)
 endif()
@@ -128,3 +132,4 @@ add_test(NAME wabridge_coordinator_test COMMAND $<TARGET_FILE:wabridge_coordinat
 add_test(NAME wabridge_secure_coordinator_test COMMAND $<TARGET_FILE:wabridge_secure_coordinator_test>)
 add_test(NAME wabridge_audio_test COMMAND $<TARGET_FILE:wabridge_audio_test>)
 add_test(NAME wabridge_input_test COMMAND $<TARGET_FILE:wabridge_input_test>)
+add_test(NAME wabridge_identity_test COMMAND $<TARGET_FILE:wabridge_identity_test>)
