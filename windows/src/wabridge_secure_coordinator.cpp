@@ -23,6 +23,22 @@ void SecureCoordinator::set_handler(const std::uint8_t channel, session::Router:
     router_.set_handler(channel, std::move(handler));
 }
 
+void SecureCoordinator::set_feature_dispatcher(features::Dispatcher dispatcher) {
+    feature_dispatcher_ = std::move(dispatcher);
+    router_.set_handler(1, [this](const protocol::Envelope& envelope) {
+        return feature_dispatcher_.dispatch(envelope);
+    });
+    router_.set_handler(3, [this](const protocol::Envelope& envelope) {
+        return feature_dispatcher_.dispatch(envelope);
+    });
+    router_.set_handler(4, [this](const protocol::Envelope& envelope) {
+        return feature_dispatcher_.dispatch(envelope);
+    });
+    router_.set_handler(5, [this](const protocol::Envelope& envelope) {
+        return feature_dispatcher_.dispatch(envelope);
+    });
+}
+
 void SecureCoordinator::stop() noexcept {
     coordinator_.stop();
 }
@@ -36,7 +52,13 @@ void SecureCoordinator::handle_socket(net::Socket socket) {
         session::SessionPeer peer(stream, messages::Role::Windows, messages::Role::Android);
         if (peer.establish(local_hello_)) {
             established_sessions_.fetch_add(1);
-            (void)peer.run([this](const protocol::Envelope& envelope) {
+            (void)peer.run([this, &peer](const protocol::Envelope& envelope) {
+                if (envelope.channel == 1 && envelope.kind == messages::kHeartbeat) {
+                    return peer.send({1, messages::kHeartbeatAck, 0, envelope.request_id, {1}});
+                }
+                if (envelope.channel == 1 && envelope.kind == messages::kSessionClose) {
+                    return false;
+                }
                 return router_.dispatch(envelope);
             });
         }

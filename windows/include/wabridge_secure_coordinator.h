@@ -4,6 +4,7 @@
 #include "wabridge_messages.h"
 #include "wabridge_session_peer.h"
 #include "wabridge_session_router.h"
+#include "wabridge_feature_dispatch.h"
 #include "wabridge_tls.h"
 
 #include <atomic>
@@ -22,6 +23,7 @@ public:
 
     bool start(std::uint16_t port);
     void set_handler(std::uint8_t channel, session::Router::Handler handler);
+    void set_feature_dispatcher(features::Dispatcher dispatcher);
     void stop() noexcept;
     bool running() const noexcept { return coordinator_.running(); }
     std::uint16_t port() const noexcept { return coordinator_.port(); }
@@ -34,6 +36,7 @@ private:
     messages::SessionHello local_hello_;
     Coordinator coordinator_;
     session::Router router_;
+    features::Dispatcher feature_dispatcher_;
     std::atomic<std::uint64_t> established_sessions_{0};
 };
 
