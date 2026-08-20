@@ -64,10 +64,12 @@ DWORD WINAPI hook_thread(LPVOID parameter) {
     auto* mouse = SetWindowsHookExW(WH_MOUSE_LL, mouse_proc, module, 0);
     auto* keyboard = SetWindowsHookExW(WH_KEYBOARD_LL, keyboard_proc, module, 0);
     capture->set_hooks(mouse, keyboard, GetCurrentThreadId());
+    capture->signal_ready();
     if (!mouse || !keyboard) {
         if (mouse) UnhookWindowsHookEx(mouse);
         if (keyboard) UnhookWindowsHookEx(keyboard);
         capture->set_hooks(nullptr, nullptr, GetCurrentThreadId());
+        capture->mark_inactive();
         g_capture = nullptr;
         return 1;
     }
@@ -97,10 +99,19 @@ LowLevelCapture::~LowLevelCapture() {
 bool LowLevelCapture::start() {
     if (active_ || !callback_) return false;
 #ifdef _WIN32
+    ready_event_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!ready_event_) return false;
     active_ = true;
     thread_ = CreateThread(nullptr, 0, hook_thread, this, 0, nullptr);
     if (!thread_) {
+        CloseHandle(static_cast<HANDLE>(ready_event_));
+        ready_event_ = nullptr;
         active_ = false;
+        return false;
+    }
+    const auto ready = WaitForSingleObject(static_cast<HANDLE>(ready_event_), 2000);
+    if (ready != WAIT_OBJECT_0 || !active_) {
+        stop();
         return false;
     }
     return true;
@@ -118,6 +129,10 @@ void LowLevelCapture::stop() noexcept {
         CloseHandle(static_cast<HANDLE>(thread_));
         thread_ = nullptr;
     }
+    if (ready_event_) {
+        CloseHandle(static_cast<HANDLE>(ready_event_));
+        ready_event_ = nullptr;
+    }
 #endif
     active_ = false;
 }
@@ -130,6 +145,14 @@ void LowLevelCapture::emit(const input::Event& event) {
 void LowLevelCapture::set_hooks(void* mouse, void* keyboard, unsigned long) {
     mouse_hook_ = mouse;
     keyboard_hook_ = keyboard;
+}
+
+void LowLevelCapture::signal_ready() {
+    if (ready_event_) SetEvent(static_cast<HANDLE>(ready_event_));
+}
+
+void LowLevelCapture::mark_inactive() noexcept {
+    active_ = false;
 }
 #endif
 

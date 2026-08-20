@@ -20,7 +20,11 @@ public:
     bool active() const noexcept { return active_; }
     void emit(const input::Event& event);
 #ifdef _WIN32
+    void mark_inactive() noexcept;
+#endif
+#ifdef _WIN32
     void set_hooks(void* mouse, void* keyboard, unsigned long thread_id);
+    void signal_ready();
 #endif
 
 private:
@@ -30,6 +34,7 @@ private:
     void* mouse_hook_{nullptr};
     void* keyboard_hook_{nullptr};
     void* thread_{nullptr};
+    void* ready_event_{nullptr};
 #endif
 };
 
