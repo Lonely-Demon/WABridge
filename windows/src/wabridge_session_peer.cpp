@@ -39,8 +39,27 @@ bool SessionPeer::establish(const messages::SessionHello& local_hello) {
     }
 }
 
+bool SessionPeer::run(const std::function<bool(const protocol::Envelope&)>& handler) {
+    if (!established_ || !handler) return false;
+    while (established_) {
+        const auto received = stream_.read();
+        if (!received.has_value()) {
+            established_ = false;
+            return false;
+        }
+        if (!handler(*received)) {
+            stop();
+            return false;
+        }
+    }
+    return true;
+}
+
 void SessionPeer::stop() noexcept {
-    if (!established_ && peer_hello_.has_value()) return;
+    if (!established_ && !peer_hello_.has_value()) {
+        stream_.close();
+        return;
+    }
     established_ = false;
     peer_hello_.reset();
     stream_.close();

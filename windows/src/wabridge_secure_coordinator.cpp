@@ -30,7 +30,14 @@ void SecureCoordinator::handle_socket(net::Socket socket) {
     try {
         tls::Stream stream(ssl, socket.native(), tls::StreamMode::Server);
         session::SessionPeer peer(stream, messages::Role::Windows, messages::Role::Android);
-        if (peer.establish(local_hello_)) established_sessions_.fetch_add(1);
+        if (peer.establish(local_hello_)) {
+            established_sessions_.fetch_add(1);
+            (void)peer.run([](const protocol::Envelope& envelope) {
+                // Feature routers attach here; bounds and channel validity have
+                // already been enforced by tls::Stream::read().
+                return envelope.channel >= 1 && envelope.channel <= 5;
+            });
+        }
     } catch (const tls::TlsError&) {
         // Stream owns and releases the SSL object on constructor failure.
     }
