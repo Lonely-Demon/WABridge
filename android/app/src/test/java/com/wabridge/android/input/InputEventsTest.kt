@@ -21,7 +21,7 @@ class InputEventsTest {
         assertEquals(key.flags, decodedKey.flags)
         assertEquals(key.code, decodedKey.code)
 
-        val button = InputEvent(InputEventType.MOUSE_BUTTON, 0, 0, 0, 0, 0, 0, 1)
+        val button = InputEvent(InputEventType.MOUSE_BUTTON, 1, 0, 0, 0, 0, 0, 1)
         assertEquals(1, InputEventCodec.decode(InputEventCodec.encode(button)).button)
     }
 

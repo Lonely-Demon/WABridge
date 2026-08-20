@@ -28,6 +28,7 @@ int main() {
 
     wabridge::input::Event button;
     button.type = wabridge::input::Type::MouseButton;
+    button.flags = 1;
     button.button = 1;
     decoded = wabridge::input::decode_event(wabridge::input::encode_event(button));
     REQUIRE(decoded.button == button.button);

@@ -60,8 +60,12 @@ void validate(const Event& event) {
     if (event.type == Type::Key && (event.code == 0 || event.code > 0x10FFFFU)) {
         throw protocol::ProtocolError("invalid key code");
     }
-    if (event.type != Type::Key && event.flags != 0) {
-        throw protocol::ProtocolError("invalid non-key input flags");
+    if ((event.type == Type::MouseButton || event.type == Type::Key) &&
+        event.flags != 1 && event.flags != 2) {
+        throw protocol::ProtocolError("invalid button/key state");
+    }
+    if ((event.type == Type::MouseMove || event.type == Type::MouseWheel) && event.flags != 0) {
+        throw protocol::ProtocolError("invalid non-stateful input flags");
     }
 }
 } // namespace

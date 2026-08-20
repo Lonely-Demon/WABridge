@@ -28,9 +28,15 @@ data class InputEvent(
         require(wheel in -1_000_000..1_000_000)
         require(button in 0..255)
         require(code in 0..0x10FFFF)
-        if (type == InputEventType.MOUSE_BUTTON) require(button in 1..8)
-        if (type == InputEventType.KEY) require(code > 0)
-        if (type != InputEventType.KEY) require(flags == 0)
+        if (type == InputEventType.MOUSE_BUTTON) {
+            require(button in 1..8)
+            require(flags == 1 || flags == 2)
+        }
+        if (type == InputEventType.KEY) {
+            require(code > 0)
+            require(flags == 1 || flags == 2)
+        }
+        if (type == InputEventType.MOUSE_MOVE || type == InputEventType.MOUSE_WHEEL) require(flags == 0)
     }
 }
 

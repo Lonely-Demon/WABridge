@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_description">WABridge uses gestures to let the Windows mouse interact with the Android device after you explicitly enable this service.</string>
+</resources>
