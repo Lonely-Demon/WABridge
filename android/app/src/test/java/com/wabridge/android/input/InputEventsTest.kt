@@ -1,8 +1,9 @@
 package com.wabridge.android.input
 
+import com.wabridge.android.protocol.ProtocolException
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
-import kotlin.test.assertFailsWith
 
 class InputEventsTest {
     @Test
@@ -26,16 +27,16 @@ class InputEventsTest {
 
     @Test
     fun rejectsInvalidEventsAndPayloads() {
-        assertFailsWith<IllegalArgumentException> {
+        assertThrows(IllegalArgumentException::class.java) {
             InputEvent(InputEventType.MOUSE_MOVE, 0, 0, 40_000, 0, 0, 0, 0)
         }
-        assertFailsWith<IllegalArgumentException> {
+        assertThrows(IllegalArgumentException::class.java) {
             InputEvent(InputEventType.MOUSE_BUTTON, 0, 0, 0, 0, 0, 0, 0)
         }
-        assertFailsWith<IllegalArgumentException> {
+        assertThrows(IllegalArgumentException::class.java) {
             InputEvent(InputEventType.KEY, 0, 0, 0, 0, 0, 0, 0)
         }
-        assertFailsWith<ProtocolException> {
+        assertThrows(ProtocolException::class.java) {
             InputEventCodec.decode(ByteArray(InputEventCodec.SIZE - 1))
         }
     }

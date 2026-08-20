@@ -1,5 +1,6 @@
 package com.wabridge.android.audio
 
+import com.wabridge.android.protocol.ProtocolException
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
