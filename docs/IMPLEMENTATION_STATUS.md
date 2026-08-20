@@ -19,14 +19,15 @@
 | Display mode and suspend control | 15 native tests; mode/sequence/toggle validation passes | Native and Android workflows green | `f0a8cee` |
 | Windows coordinator listener lifecycle | 16 native tests; dynamic bind/dispatch/idempotent stop pass | Native and Android workflows green | `a628cdc` |
 | Secure coordinator socket-to-session integration | 17 native tests; accepted socket mutual TLS and SessionPeer pass | Native and Android workflows green | `53aaf4b` |
-| Android debug APK artifact | APK build and upload pass; SHA-256 `ab216b48c79d561bfa51356f113444eb94d3de41ae0774490b665ea72a2ac8dc` | Android workflow green | `5c1647f` |
-| Windows coordinator artifact | Qt deployment bundle produced; executable SHA-256 `81727fa8d777459081fff8285d2de3524cd1a6f6f036ea2e8a30986b736ef662` | Windows workflow green | `6d47b7d` |
+| Android debug APK artifact | APK build and upload pass; SHA-256 `f3b23aad082c262201653539818b750ea0beaa142385b7c5ba4128fae153d147` | Android workflow green | `e884856` |
+| Windows coordinator artifact | Qt deployment bundle produced; executable SHA-256 `febfe325368c5d8069ac74a008a739cd3c8b933f61189a6cf00fefe5d5ad5ee4` | Windows workflow green | `e884856` |
 | Android foreground session lifecycle | Foreground service, NSD browser-only mode, TLS SESSION_HELLO, pinned reconnect, and explicit first-pair approval compile and pass Android CI | Android workflow green | `368e01b`, `a2b3891` |
 | Windows Qt6 coordinator shell | Qt6 GUI compiles with the native secure coordinator; 19 native Release CTest tests pass; bundle assembly passes | Windows workflow green; bundle artifact produced | `6016f72`, `6695b68`, `d6477dd`, `6d4c1f2`, `1abeea9` |
 | Audio and input codecs | Bounded PCM16/Opus frame and mouse/keyboard event codecs; 19 native Release tests and Android JVM codec tests pass | Native, Android, and Windows workflows green | `1f96fff`, `a2b3891` |
 | Android AccessibilityService adapter | Explicitly user-enabled gesture adapter registered with manifest metadata; unsupported keyboard/wheel injection is rejected | Android workflow green | `6d47b7d` |
 | Authenticated post-hello session loop | SessionPeer keeps the TLS session alive and validates bounded envelopes after SESSION_HELLO; coordinator teardown remains idempotent | Native and Windows workflows green | `ffbb69f` |
 | Android manual endpoint UI | Compose shell accepts a bounded Windows host/IP and TCP port and starts the same foreground session path | Android workflow green | `5c1647f` |
+| Cross-platform session routers | Native and Android fail-closed routers dispatch authenticated envelopes only to registered channel owners | Native, Android, and Windows workflows green | `ccfa002`, `e884856` |
 
 ## Current implementation boundary
 
@@ -44,4 +45,4 @@ The sandbox cannot compile or run a Windows SDK/Qt application, cannot install a
 
 ## Next implementation gates
 
-The next gate is an actual Windows/Android control connection using the tested TLS stream, mDNS/manual endpoint selection, DPAPI/Keystore identity, and session hello/capability exchange. Native loopback, Windows Qt compilation, Android foreground lifecycle compilation, manual endpoint UI, codec tests, and the user-authorized AccessibilityService adapter build are green, but hardware black-box verification remains outstanding. The next implementation gate is wiring file, clipboard, audio, input, and display commands into explicit session owners with cancellation and backpressure. Display transport remains intentionally separate: Windows IDD/desktop capture and Android MediaProjection require platform-specific builds and explicit user authorization, which cannot be granted in the Linux sandbox.
+The next gate is an actual Windows/Android control connection using the tested TLS stream, mDNS/manual endpoint selection, DPAPI/Keystore identity, and session hello/capability exchange. Native loopback, Windows Qt compilation, Android foreground lifecycle compilation, manual endpoint UI, codec tests, channel routers, and the user-authorized AccessibilityService adapter build are green, but hardware black-box verification remains outstanding. The next implementation gate is wiring file, clipboard, audio, input, and display commands into explicit session owners with cancellation and backpressure. Display transport remains intentionally separate: Windows IDD/desktop capture and Android MediaProjection require platform-specific builds and explicit user authorization, which cannot be granted in the Linux sandbox.
