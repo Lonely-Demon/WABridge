@@ -99,7 +99,7 @@ bool WasapiRenderer::render(const audio::Frame& frame) {
     if (FAILED(client->GetCurrentPadding(&padding)) || padding >= buffer_frames_) return false;
     const auto frame_bytes = static_cast<std::size_t>(channels_) * sizeof(std::int16_t);
     const auto requested = static_cast<UINT32>(frame.data.size() / frame_bytes);
-    const auto frames = std::min(requested, buffer_frames_ - padding);
+    const auto frames = (std::min)(requested, buffer_frames_ - padding);
     if (frames == 0) return false;
     BYTE* destination = nullptr;
     if (FAILED(render->GetBuffer(frames, &destination))) return false;
