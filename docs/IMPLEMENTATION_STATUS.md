@@ -19,8 +19,8 @@
 | Display mode and suspend control | 15 native tests; mode/sequence/toggle validation passes | Native and Android workflows green | `f0a8cee` |
 | Windows coordinator listener lifecycle | 16 native tests; dynamic bind/dispatch/idempotent stop pass | Native and Android workflows green | `a628cdc` |
 | Secure coordinator socket-to-session integration | 17 native tests; accepted socket mutual TLS and SessionPeer pass | Native and Android workflows green | `53aaf4b` |
-| Android debug APK artifact | APK build and upload pass; SHA-256 `bf259532d221e7e404521481fbfd393b0a1b2993ea682640eefa904c45ee56ea` | Android workflow green | `72b7a58` |
-| Windows coordinator artifact | Qt deployment bundle produced; executable SHA-256 `5b45273691d094f8578d3ff6cff81b1a57c8b1225190bf352dd390baf44131cb` | Windows workflow green | `72b7a58` |
+| Android debug APK artifact | APK build and upload pass; SHA-256 `3519255046f386324426857dbb6d2fa4a298bbb36ce39a3acaead57298cf2b73` | Android workflow green | `2e8942f` |
+| Windows coordinator artifact | Qt deployment bundle produced; executable SHA-256 `766af78766ca4c5b31969f5309d2a7a392a683038b00dc04cdb94e9de4ae8990` | Windows workflow green | `2e8942f` |
 | Android foreground session lifecycle | Foreground service, NSD browser-only mode, TLS SESSION_HELLO, pinned reconnect, explicit first-pair approval, and idle-safe receive loop compile and pass Android CI | Android workflow green | `368e01b`, `3771fef` |
 | Windows Qt6 coordinator shell | Qt6 GUI compiles with the native secure coordinator; 19 native Release CTest tests pass; bundle assembly passes | Windows workflow green; bundle artifact produced | `6016f72`, `6695b68`, `d6477dd`, `6d4c1f2`, `1abeea9` |
 | Audio and input codecs | Bounded PCM16/Opus frame and mouse/keyboard event codecs; 19 native Release tests and Android JVM codec tests pass | Native, Android, and Windows workflows green | `1f96fff`, `a2b3891` |
