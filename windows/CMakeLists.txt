@@ -23,6 +23,8 @@ add_library(wabridge_protocol STATIC
     src/wabridge_display.cpp
     src/wabridge_coordinator.cpp
     src/wabridge_secure_coordinator.cpp
+    src/wabridge_audio.cpp
+    src/wabridge_input.cpp
 )
 target_include_directories(wabridge_protocol PUBLIC include)
 target_link_libraries(wabridge_protocol PUBLIC OpenSSL::SSL OpenSSL::Crypto)
@@ -96,6 +98,12 @@ target_link_libraries(wabridge_coordinator_test PRIVATE wabridge_protocol)
 add_executable(wabridge_secure_coordinator_test ../tests/test_cpp_secure_coordinator.cpp)
 target_link_libraries(wabridge_secure_coordinator_test PRIVATE wabridge_protocol)
 
+add_executable(wabridge_audio_test ../tests/test_cpp_audio.cpp)
+target_link_libraries(wabridge_audio_test PRIVATE wabridge_protocol)
+
+add_executable(wabridge_input_test ../tests/test_cpp_input.cpp)
+target_link_libraries(wabridge_input_test PRIVATE wabridge_protocol)
+
 if (NOT MSVC)
     target_link_libraries(wabridge_tls_stream_test PRIVATE pthread)
 endif()
@@ -118,3 +126,5 @@ add_test(NAME wabridge_session_peer_test COMMAND $<TARGET_FILE:wabridge_session_
 add_test(NAME wabridge_display_test COMMAND $<TARGET_FILE:wabridge_display_test>)
 add_test(NAME wabridge_coordinator_test COMMAND $<TARGET_FILE:wabridge_coordinator_test>)
 add_test(NAME wabridge_secure_coordinator_test COMMAND $<TARGET_FILE:wabridge_secure_coordinator_test>)
+add_test(NAME wabridge_audio_test COMMAND $<TARGET_FILE:wabridge_audio_test>)
+add_test(NAME wabridge_input_test COMMAND $<TARGET_FILE:wabridge_input_test>)
