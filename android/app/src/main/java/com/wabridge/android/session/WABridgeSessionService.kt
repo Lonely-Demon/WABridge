@@ -13,6 +13,8 @@ import com.wabridge.android.MainActivity
 import com.wabridge.android.discovery.NsdDiscovery
 import com.wabridge.android.pairing.AndroidIdentityStore
 import com.wabridge.android.audio.AudioPlayback
+import com.wabridge.android.audio.AudioPlaybackCapture
+import com.wabridge.android.audio.AudioCodecWire
 import com.wabridge.android.input.AccessibilityInputBridge
 import com.wabridge.android.protocol.Envelope
 import com.wabridge.android.protocol.SessionHelloCodec
@@ -26,6 +28,7 @@ import kotlinx.coroutines.launch
 import java.net.InetSocketAddress
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Owns the long-lived Wi-Fi session independently of the Compose activity.
@@ -44,12 +47,15 @@ class WABridgeSessionService : Service() {
     private val router = SessionChannelRouter()
     private val featureDispatcher = SessionFeatureDispatcher()
     private val audioPlayback = AudioPlayback()
+    private lateinit var audioCapture: AudioPlaybackCapture
+    private val requestIds = AtomicLong(100)
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         identity = AndroidIdentityStore(this)
         identity.ensureIdentity()
+        audioCapture = AudioPlaybackCapture(this)
         featureDispatcher.onInputEvent = { event -> AccessibilityInputBridge.dispatch(event) }
         featureDispatcher.onAudioFrame = { frame -> audioPlayback.play(frame) }
         sessions = SessionManager { state ->
@@ -66,6 +72,7 @@ class WABridgeSessionService : Service() {
                 begin(intent)
             }
             ACTION_APPROVE_PAIRING -> approvePairing()
+            ACTION_START_AUDIO_CAPTURE -> startAudioCapture(intent)
             ACTION_STOP -> stopSession()
         }
         return START_NOT_STICKY
@@ -145,6 +152,24 @@ class WABridgeSessionService : Service() {
         }
     }
 
+    private fun startAudioCapture(intent: Intent) {
+        if (sessions.state() != SessionState.ESTABLISHED) return
+        val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
+        val resultData = parcelableIntent(intent, EXTRA_RESULT_DATA) ?: return
+        val session = client ?: return
+        audioCapture.start(resultCode, resultData) { frame ->
+            if (!destroyed.get()) {
+                session.sendEnvelope(
+                    Envelope(5, SessionFeatureDispatcher.KIND_AUDIO_FRAME, 0, requestIds.incrementAndGet(), AudioCodecWire.encode(frame)),
+                )
+            }
+        }
+    }
+
+    private fun parcelableIntent(intent: Intent, key: String): Intent? =
+        if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(key, Intent::class.java)
+        else @Suppress("DEPRECATION") intent.getParcelableExtra(key)
+
     private fun approvePairing() {
         val peer = pendingPeer ?: return
         if (sessions.state() != SessionState.PAIRING_REQUIRED) return
@@ -196,6 +221,7 @@ class WABridgeSessionService : Service() {
         client?.stop()
         client = null
         audioPlayback.stop()
+        audioCapture.stop()
         pendingPeer = null
         sessions.stop()
         SessionRuntime.reset()
@@ -260,9 +286,12 @@ class WABridgeSessionService : Service() {
         const val ACTION_START = "com.wabridge.android.action.START"
         const val ACTION_APPROVE_PAIRING = "com.wabridge.android.action.APPROVE_PAIRING"
         const val ACTION_STOP = "com.wabridge.android.action.STOP"
+        const val ACTION_START_AUDIO_CAPTURE = "com.wabridge.android.action.START_AUDIO_CAPTURE"
         const val EXTRA_HOST = "com.wabridge.android.extra.HOST"
         const val EXTRA_PORT = "com.wabridge.android.extra.PORT"
         const val EXTRA_DEVICE_ID = "com.wabridge.android.extra.DEVICE_ID"
+        const val EXTRA_RESULT_CODE = "com.wabridge.android.extra.RESULT_CODE"
+        const val EXTRA_RESULT_DATA = "com.wabridge.android.extra.RESULT_DATA"
         private const val CHANNEL_ID = "wabridge-session"
         private const val NOTIFICATION_ID = 1001
         private const val TXT_DEVICE_ID = "device_id"
