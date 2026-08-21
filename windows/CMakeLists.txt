@@ -40,7 +40,7 @@ endif()
 option(WABRIDGE_BUILD_QT_WINDOWS "Build the Windows Qt6 coordinator application" OFF)
 if (WABRIDGE_BUILD_QT_WINDOWS)
     find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
-    add_executable(wabridge_windows WIN32 src/wabridge_qt_main.cpp)
+    add_executable(wabridge_windows WIN32 src/wabridge_qt_main.cpp ../third_party/qrcodegen/qrcodegen.cpp)
     target_link_libraries(wabridge_windows PRIVATE wabridge_protocol Qt6::Widgets Qt6::Network)
     target_compile_options(wabridge_windows PRIVATE
         $<$<CXX_COMPILER_ID:MSVC>:/W4;/WX>

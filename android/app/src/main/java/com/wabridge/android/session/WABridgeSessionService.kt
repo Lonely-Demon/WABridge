@@ -101,9 +101,10 @@ class WABridgeSessionService : Service() {
         val host = intent.getStringExtra(EXTRA_HOST)
         val port = intent.getIntExtra(EXTRA_PORT, 0)
         val deviceId = intent.getStringExtra(EXTRA_DEVICE_ID)
+        val expectedFingerprint = intent.getStringExtra(EXTRA_EXPECTED_FINGERPRINT)
         if (!host.isNullOrBlank() && port in 1..65535) {
             SessionLog.info("Manual endpoint accepted: $host:$port")
-            connectTo(InetSocketAddress(host, port), deviceId)
+            connectTo(InetSocketAddress(host, port), deviceId, expectedFingerprint)
             return
         }
 
@@ -126,13 +127,14 @@ class WABridgeSessionService : Service() {
             ?.toString(Charsets.UTF_8)
             ?.takeIf { it.isNotBlank() }
         sessions.apply(SessionEvent.CANDIDATE_FOUND)
-        connectTo(InetSocketAddress(host, info.port), deviceId)
+        connectTo(InetSocketAddress(host, info.port), deviceId, null)
     }
 
-    private fun connectTo(endpoint: InetSocketAddress, advertisedDeviceId: String?) {
+    private fun connectTo(endpoint: InetSocketAddress, advertisedDeviceId: String?, suppliedFingerprint: String?) {
         if (connectJob?.isActive == true || destroyed.get()) return
         connectJob = scope.launch {
-            val expectedFingerprint = advertisedDeviceId?.let(identity::peerFingerprint)
+            val expectedFingerprint = suppliedFingerprint ?: advertisedDeviceId?.let(identity::peerFingerprint)
+            val qrBootstrap = suppliedFingerprint != null
             val firstPair = expectedFingerprint == null
             val session = TlsSessionClient(
                 identity = identity,
@@ -151,12 +153,12 @@ class WABridgeSessionService : Service() {
                 if (advertisedDeviceId != null && advertisedDeviceId != peer.hello.deviceId) {
                     throw SecurityException("Windows device identity does not match its discovery record")
                 }
-                if (!firstPair && expectedFingerprint == peer.fingerprint) {
+                if (!qrBootstrap && !firstPair && expectedFingerprint == peer.fingerprint) {
                     sessions.apply(SessionEvent.IDENTITY_MATCHES)
                     SessionRuntime.update(SessionState.ESTABLISHED, "Securely connected to ${peer.hello.deviceId}")
                     startReceiveLoop(session)
                 } else {
-                    SessionLog.warn("First-pair approval required for ${peer.hello.deviceId}")
+                    SessionLog.warn(if (qrBootstrap) "QR endpoint verified; explicit first-pair approval required" else "First-pair approval required for ${peer.hello.deviceId}")
                     pendingPeer = peer
                     sessions.apply(SessionEvent.PAIRING_NEEDED)
                     SessionRuntime.requirePairing(
@@ -361,6 +363,7 @@ class WABridgeSessionService : Service() {
         const val EXTRA_HOST = "com.wabridge.android.extra.HOST"
         const val EXTRA_PORT = "com.wabridge.android.extra.PORT"
         const val EXTRA_DEVICE_ID = "com.wabridge.android.extra.DEVICE_ID"
+        const val EXTRA_EXPECTED_FINGERPRINT = "com.wabridge.android.extra.EXPECTED_FINGERPRINT"
         const val EXTRA_RESULT_CODE = "com.wabridge.android.extra.RESULT_CODE"
         const val EXTRA_RESULT_DATA = "com.wabridge.android.extra.RESULT_DATA"
         private const val CHANNEL_ID = "wabridge-session"

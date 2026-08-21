@@ -6,11 +6,15 @@
 #include "wabridge_wasapi_audio.h"
 #include "wabridge_secure_coordinator.h"
 #include "wabridge_tls.h"
+#include "../third_party/qrcodegen/qrcodegen.h"
 
 #include <QApplication>
 #include <QtNetwork/QAbstractSocket>
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <QImage>
+#include <QPainter>
+#include <QPixmap>
 #include <QFile>
 #include <QFileDialog>
 #include <QFormLayout>
@@ -25,8 +29,11 @@
 #include <QPlainTextEdit>
 #include <QtNetwork/QHostAddress>
 #include <QtNetwork/QNetworkInterface>
+#include <QtNetwork/QUrlQuery>
+#include <QUrl>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QStackedWidget>
 #include <QSpinBox>
@@ -239,7 +246,7 @@ public:
         brandSub->setObjectName("eyebrow");
         railLayout->addWidget(brandSub);
         railLayout->addSpacing(28);
-        for (const auto& label : {QString("⌂  Dashboard"), QString("◉  Phone Control"), QString("♫  Audio"), QString("□  Files"), QString("▣  Clipboard"), QString("▤  Logs"), QString("⚙  Settings")}) {
+        for (const auto& label : {QString("⌂  Dashboard"), QString("◉  Phone Control"), QString("♫  Audio"), QString("□  Files"), QString("▣  Clipboard"), QString("⌗  QR Pair"), QString("▤  Logs"), QString("⚙  Settings")}) {
             auto* nav = new QPushButton(label, rail);
             nav->setObjectName("nav");
             nav->setProperty("selected", label.startsWith("⌂"));
@@ -247,6 +254,10 @@ public:
             connect(nav, &QPushButton::clicked, this, [this, label] {
                 if (label.contains("Logs")) {
                     show_logs();
+                    return;
+                }
+                if (label.contains("QR Pair")) {
+                    show_pairing_qr();
                     return;
                 }
                 status_->setText(label.contains("Dashboard")
@@ -416,6 +427,88 @@ private:
         return container;
     }
 
+    QString local_ipv4() const {
+        for (const auto& address : QNetworkInterface::allAddresses()) {
+            if (address.protocol() == QAbstractSocket::IPv4Protocol && !address.isLoopback()) return address.toString();
+        }
+        return {};
+    }
+
+    void show_pairing_qr() {
+        if (!coordinator_ || !coordinator_->running() || pairing_device_id_.isEmpty() || pairing_fingerprint_.isEmpty()) {
+            append_log("QR pairing requested before the secure coordinator was ready");
+            status_->setText("Start the secure coordinator before showing a pairing QR");
+            return;
+        }
+        const auto host = local_ipv4();
+        if (host.isEmpty()) {
+            append_log("QR pairing unavailable: no non-loopback IPv4 address");
+            status_->setText("No non-loopback Wi-Fi IPv4 address is available");
+            return;
+        }
+        QUrlQuery query;
+        query.addQueryItem("v", "1");
+        query.addQueryItem("host", host);
+        query.addQueryItem("port", QString::number(coordinator_->port()));
+        query.addQueryItem("device_id", pairing_device_id_);
+        query.addQueryItem("fp", pairing_fingerprint_);
+        query.addQueryItem("expires", QString::number(QDateTime::currentSecsSinceEpoch() + 300));
+        query.addQueryItem("nonce", QString::number(QRandomGenerator::global()->generate64(), 16));
+        QUrl uri;
+        uri.setScheme("wabridge");
+        uri.setHost("pair");
+        uri.setQuery(query);
+        const auto payload = uri.toString(QUrl::FullyEncoded);
+        const auto encoded = payload.toUtf8();
+        const auto qr = qrcodegen::QrCode::encodeText(encoded.constData(), qrcodegen::QrCode::Ecc::MEDIUM);
+        constexpr int scale = 7;
+        constexpr int border = 4;
+        const int side = (qr.getSize() + border * 2) * scale;
+        QImage image(side, side, QImage::Format_RGB32);
+        image.fill(Qt::white);
+        QPainter painter(&image);
+        painter.setBrush(Qt::black);
+        painter.setPen(Qt::NoPen);
+        for (int y = 0; y < qr.getSize(); ++y) {
+            for (int x = 0; x < qr.getSize(); ++x) {
+                if (qr.getModule(x, y)) painter.drawRect((x + border) * scale, (y + border) * scale, scale, scale);
+            }
+        }
+        painter.end();
+
+        QDialog dialog(this);
+        dialog.setWindowTitle("WABridge — Pair with QR");
+        dialog.resize(520, 700);
+        auto* layout = new QVBoxLayout(&dialog);
+        auto* title = new QLabel("Pair Android with this Windows laptop", &dialog);
+        title->setObjectName("title");
+        title->setAlignment(Qt::AlignCenter);
+        layout->addWidget(title);
+        auto* hint = new QLabel("Scan this code from a QR scanner. It contains only a short-lived local endpoint and the TLS certificate fingerprint; Android still asks for first-pair approval.", &dialog);
+        hint->setObjectName("subtitle");
+        hint->setWordWrap(true);
+        layout->addWidget(hint);
+        auto* qr_view = new QLabel(&dialog);
+        qr_view->setAlignment(Qt::AlignCenter);
+        qr_view->setPixmap(QPixmap::fromImage(image));
+        layout->addWidget(qr_view, 1);
+        auto* details = new QLabel(QString("Endpoint: %1:%2\nExpires in 5 minutes\nFingerprint: %3")
+                                       .arg(host).arg(coordinator_->port()).arg(pairing_fingerprint_), &dialog);
+        details->setObjectName("subtitle");
+        details->setWordWrap(true);
+        layout->addWidget(details);
+        auto* payload_view = new QPlainTextEdit(&dialog);
+        payload_view->setReadOnly(true);
+        payload_view->setMaximumHeight(70);
+        payload_view->setPlainText(payload);
+        layout->addWidget(payload_view);
+        auto* close = new QPushButton("Close", &dialog);
+        layout->addWidget(close);
+        connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
+        append_log(QString("Displayed QR pairing payload for %1 at %2:%3").arg(pairing_device_id_, host).arg(coordinator_->port()));
+        dialog.exec();
+    }
+
     void append_log(const QString& message) {
         const auto line = QString("[%1] %2").arg(QDateTime::currentDateTime().toString("HH:mm:ss"), message.trimmed());
         log_entries_.append(line);
@@ -541,6 +634,9 @@ private:
                 return;
             }
             append_log(QString("TCP listener bound to port %1").arg(coordinator->port()));
+            pairing_device_id_ = advertised_device_id;
+            pairing_fingerprint_ = QString::fromStdString(fingerprint);
+            pairing_port_ = coordinator->port();
             coordinator_ = std::move(coordinator);
             const bool mdns_ready = mdns_ && mdns_->start(advertised_device_id, coordinator_->port());
             append_log(mdns_ready ? "mDNS availability advertisement started" : "mDNS advertisement unavailable; manual IP and firewall checks required");
@@ -601,6 +697,9 @@ private:
             renderer_.stop();
         }
         if (mdns_) mdns_->stop();
+        pairing_device_id_.clear();
+        pairing_fingerprint_.clear();
+        pairing_port_ = 0;
         if (!coordinator_) return;
         coordinator_->stop();
         coordinator_.reset();
@@ -624,6 +723,9 @@ private:
     std::unique_ptr<wabridge::platform_input::LowLevelCapture> input_capture_;
     wabridge::platform_audio::WasapiRenderer renderer_;
     QStringList log_entries_;
+    QString pairing_device_id_;
+    QString pairing_fingerprint_;
+    std::uint16_t pairing_port_{0};
     std::mutex audio_mutex_;
 };
 

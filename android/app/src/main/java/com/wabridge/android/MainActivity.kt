@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -70,6 +71,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.wabridge.android.session.QrPairingPayload
 import com.wabridge.android.session.SessionLog
 import com.wabridge.android.session.SessionLogEntry
 import com.wabridge.android.session.SessionRuntime
@@ -87,7 +89,9 @@ private val WASurface = Color(0xFF1C1C1E)
 private val WAStroke = Color(0x2AFFFFFF)
 private val WAMuted = Color(0xFFC1C6D7)
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity {
+    private var qrPayload by mutableStateOf<QrPairingPayload?>(null)
+
     private val projectionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
@@ -110,11 +114,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleQrIntent(intent)
         setContent {
             WABridgeTheme {
                 WABridgeShell(
+                    qrPayload = qrPayload,
                     onStart = { startSession() },
-                    onManualConnect = { host, port -> startManualSession(host, port) },
+                    onManualConnect = { host, port -> startManualSession(host, port, null, null) },
+                    onQrConnect = { payload -> startManualSession(payload.host, payload.port, payload.deviceId, payload.fingerprint) },
+                    onQrDismiss = { qrPayload = null },
                     onStartAudioCapture = { requestAudioCapture() },
                     onApprovePairing = { sendServiceAction(WABridgeSessionService.ACTION_APPROVE_PAIRING) },
                     onStop = { sendServiceAction(WABridgeSessionService.ACTION_STOP) },
@@ -136,16 +144,36 @@ class MainActivity : ComponentActivity() {
         projectionLauncher.launch(manager.createScreenCaptureIntent())
     }
 
+    private fun handleQrIntent(intent: Intent?) {
+        val data = intent?.data ?: return
+        runCatching { QrPairingPayload.parse(data) }
+            .onSuccess {
+                qrPayload = it
+                SessionLog.info("QR pairing payload accepted for ${it.host}:${it.port}")
+            }
+            .onFailure {
+                SessionLog.error("QR pairing payload rejected: ${it.message ?: it.javaClass.simpleName}")
+            }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleQrIntent(intent)
+    }
+
     private fun startSession() {
         startForegroundAction(Intent(this, WABridgeSessionService::class.java).setAction(WABridgeSessionService.ACTION_START))
     }
 
-    private fun startManualSession(host: String, port: Int) {
+    private fun startManualSession(host: String, port: Int, deviceId: String?, fingerprint: String?) {
         startForegroundAction(
             Intent(this, WABridgeSessionService::class.java)
                 .setAction(WABridgeSessionService.ACTION_START)
                 .putExtra(WABridgeSessionService.EXTRA_HOST, host)
-                .putExtra(WABridgeSessionService.EXTRA_PORT, port),
+                .putExtra(WABridgeSessionService.EXTRA_PORT, port)
+                .putExtra(WABridgeSessionService.EXTRA_DEVICE_ID, deviceId)
+                .putExtra(WABridgeSessionService.EXTRA_EXPECTED_FINGERPRINT, fingerprint),
         )
     }
 
@@ -184,11 +212,14 @@ private fun WABridgeTheme(content: @Composable () -> Unit) {
 
 @Composable
 private fun WABridgeShell(
+    qrPayload: QrPairingPayload?,
     onStart: () -> Unit,
     onManualConnect: (String, Int) -> Unit,
+    onQrConnect: (QrPairingPayload) -> Unit,
     onStartAudioCapture: () -> Unit,
     onApprovePairing: () -> Unit,
     onStop: () -> Unit,
+    onQrDismiss: () -> Unit,
 ) {
     val state by SessionRuntime.state.collectAsState()
     val detail by SessionRuntime.detail.collectAsState()
@@ -205,6 +236,7 @@ private fun WABridgeShell(
                     state = state,
                     detail = detail,
                     pairing = pairing,
+                    qrPayload = qrPayload,
                     host = host,
                     port = port,
                     manualVisible = manualVisible,
@@ -213,9 +245,11 @@ private fun WABridgeShell(
                     onStart = onStart,
                     onManualToggle = { manualVisible = !manualVisible },
                     onManualConnect = { onManualConnect(host.trim(), port.toInt()) },
+                    onQrConnect = onQrConnect,
                     onApprovePairing = onApprovePairing,
                     onStartAudioCapture = onStartAudioCapture,
                     onStop = onStop,
+                    onQrDismiss = onQrDismiss,
                 )
                 WABridgeTab.FEATURES -> FeaturesScreen(connected = state == SessionState.ESTABLISHED, onStartAudioCapture = onStartAudioCapture)
                 WABridgeTab.SETUP -> SetupScreen()
@@ -232,6 +266,7 @@ private fun ConnectDashboard(
     state: SessionState,
     detail: String,
     pairing: com.wabridge.android.session.PairingPrompt?,
+    qrPayload: QrPairingPayload?,
     host: String,
     port: String,
     manualVisible: Boolean,
@@ -240,9 +275,11 @@ private fun ConnectDashboard(
     onStart: () -> Unit,
     onManualToggle: () -> Unit,
     onManualConnect: () -> Unit,
+    onQrConnect: (QrPairingPayload) -> Unit,
     onApprovePairing: () -> Unit,
     onStartAudioCapture: () -> Unit,
     onStop: () -> Unit,
+    onQrDismiss: () -> Unit,
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -316,6 +353,9 @@ private fun ConnectDashboard(
                 }
             }
         }
+        if (qrPayload != null) {
+            QrPairingCard(qrPayload, onConnect = { onQrConnect(qrPayload) }, onDismiss = onQrDismiss)
+        }
         if (pairing != null) {
             PairingCard(pairing, onApprovePairing)
         }
@@ -380,6 +420,31 @@ private fun PairingCard(pairing: com.wabridge.android.session.PairingPrompt, onA
             Text(pairing.fingerprint, color = WAGold, fontSize = 13.sp)
             Spacer(Modifier.height(14.dp))
             GradientButton(text = "Approve pairing", onClick = onApprove, icon = Icons.Filled.CheckCircle)
+        }
+    }
+}
+
+@Composable
+private fun QrPairingCard(payload: QrPairingPayload, onConnect: () -> Unit, onDismiss: () -> Unit) {
+    GlassCard(modifier = Modifier.fillMaxWidth(), borderColor = Color(0x664B8EFF)) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconTile(Icons.Filled.QrCode2, WABlue)
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Windows QR pairing", fontWeight = FontWeight.Bold)
+                    Text("A short-lived endpoint was scanned. TLS fingerprint approval still applies.", color = WAMuted, fontSize = 13.sp)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(payload.deviceId, fontWeight = FontWeight.SemiBold)
+            Text("${payload.host}:${payload.port}", color = WACyan, fontSize = 13.sp)
+            Text("Fingerprint hint: ${payload.fingerprint.take(16)}…", color = WAMuted, fontSize = 12.sp)
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                GradientButton(text = "Connect securely", onClick = onConnect, icon = Icons.Filled.Security, modifier = Modifier.weight(1f))
+                GlassButton(text = "Dismiss", onClick = onDismiss, tint = WAMuted, modifier = Modifier.weight(1f))
+            }
         }
     }
 }
@@ -642,10 +707,10 @@ private fun GradientButton(text: String, onClick: () -> Unit, enabled: Boolean =
 }
 
 @Composable
-private fun GlassButton(text: String, onClick: () -> Unit, icon: ImageVector? = null, tint: Color = Color.White) {
+private fun GlassButton(text: String, onClick: () -> Unit, icon: ImageVector? = null, tint: Color = Color.White, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(14.dp)
     Row(
-        modifier = Modifier.fillMaxWidth().height(46.dp).clip(shape).background(Color(0x0FFFFFFF)).border(BorderStroke(1.dp, WAStroke), shape).clickable(onClick = onClick),
+        modifier = modifier.fillMaxWidth().height(46.dp).clip(shape).background(Color(0x0FFFFFFF)).border(BorderStroke(1.dp, WAStroke), shape).clickable(onClick = onClick),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
