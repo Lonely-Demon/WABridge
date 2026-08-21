@@ -8,7 +8,7 @@
 #include "wabridge_tls.h"
 
 #include <QApplication>
-#include <QAbstractSocket>
+#include <QtNetwork/QAbstractSocket>
 #include <QCryptographicHash>
 #include <QFile>
 #include <QFileDialog>
@@ -20,15 +20,15 @@
 #include <QLineEdit>
 #include <QMainWindow>
 #include <QMetaObject>
-#include <QHostAddress>
-#include <QNetworkInterface>
+#include <QtNetwork/QHostAddress>
+#include <QtNetwork/QNetworkInterface>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QStackedWidget>
 #include <QSpinBox>
 #include <QTimer>
-#include <QUdpSocket>
+#include <QtNetwork/QUdpSocket>
 #include <QVBoxLayout>
 #include <QWidget>
 
