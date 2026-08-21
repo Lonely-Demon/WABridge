@@ -52,6 +52,7 @@ public:
         setMinimumSize(900, 620);
         setStyleSheet(R"(
             QMainWindow, QWidget { background: #111317; color: #eef2f7; font-family: "Segoe UI"; }
+            QLabel { background: transparent; }
             QFrame#rail { background: #171a20; border-right: 1px solid #2b313b; }
             QLabel#brand { color: #f5f7fb; font-size: 24px; font-weight: 700; }
             QLabel#eyebrow { color: #8390a3; font-size: 10px; font-weight: 700; letter-spacing: 1px; }

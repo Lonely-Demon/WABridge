@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.net.nsd.NsdServiceInfo
@@ -68,8 +69,12 @@ class WABridgeSessionService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
-                startForeground(NOTIFICATION_ID, notification("Starting WABridge session"))
-                begin(intent)
+                runCatching {
+                    promoteSessionForeground("Starting WABridge session")
+                    begin(intent)
+                }.onFailure { error ->
+                    fail("Unable to start WABridge session: ${error.message ?: error.javaClass.simpleName}")
+                }
             }
             ACTION_APPROVE_PAIRING -> approvePairing()
             ACTION_START_AUDIO_CAPTURE -> startAudioCapture(intent)
@@ -157,12 +162,47 @@ class WABridgeSessionService : Service() {
         val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
         val resultData = parcelableIntent(intent, EXTRA_RESULT_DATA) ?: return
         val session = client ?: return
-        audioCapture.start(resultCode, resultData) { frame ->
+        val promoted = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification("Capturing phone audio with your permission"),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION,
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification("Capturing phone audio with your permission"))
+            }
+            true
+        }.getOrElse {
+            fail("Unable to start audio permission service: ${it.message ?: it.javaClass.simpleName}")
+            false
+        }
+        if (!promoted) return
+        val started = runCatching {
+            audioCapture.start(resultCode, resultData) { frame ->
             if (!destroyed.get()) {
                 session.sendEnvelope(
                     Envelope(5, SessionFeatureDispatcher.KIND_AUDIO_FRAME, 0, requestIds.incrementAndGet(), AudioCodecWire.encode(frame)),
                 )
             }
+            }
+        }.getOrElse {
+            fail("Unable to start phone audio capture: ${it.message ?: it.javaClass.simpleName}")
+            false
+        }
+        if (!started) fail("Phone audio capture could not be initialized on this device")
+    }
+
+    private fun promoteSessionForeground(detail: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification(detail),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification(detail))
         }
     }
 
