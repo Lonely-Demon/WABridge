@@ -29,7 +29,7 @@
 #include <QPlainTextEdit>
 #include <QtNetwork/QHostAddress>
 #include <QtNetwork/QNetworkInterface>
-#include <QtNetwork/QUrlQuery>
+#include <QUrlQuery>
 #include <QUrl>
 #include <QMessageBox>
 #include <QPushButton>
