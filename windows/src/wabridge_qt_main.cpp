@@ -10,6 +10,7 @@
 #include <QApplication>
 #include <QtNetwork/QAbstractSocket>
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QFile>
 #include <QFileDialog>
 #include <QFormLayout>
@@ -20,6 +21,8 @@
 #include <QLineEdit>
 #include <QMainWindow>
 #include <QMetaObject>
+#include <QDialog>
+#include <QPlainTextEdit>
 #include <QtNetwork/QHostAddress>
 #include <QtNetwork/QNetworkInterface>
 #include <QMessageBox>
@@ -27,6 +30,7 @@
 #include <QRegularExpression>
 #include <QStackedWidget>
 #include <QSpinBox>
+#include <QStringList>
 #include <QTimer>
 #include <QtNetwork/QUdpSocket>
 #include <QVBoxLayout>
@@ -59,6 +63,16 @@ public:
             socket_.reset();
             return false;
         }
+        connect(socket_.get(), &QUdpSocket::readyRead, this, [this] {
+            while (socket_ && socket_->hasPendingDatagrams()) {
+                QByteArray datagram;
+                datagram.resize(static_cast<int>(socket_->pendingDatagramSize()));
+                QHostAddress sender;
+                quint16 sender_port = 0;
+                socket_->readDatagram(datagram.data(), datagram.size(), &sender, &sender_port);
+                announce(sender, sender_port);
+            }
+        });
         announce();
         timer_.start(3000);
         return true;
@@ -109,7 +123,7 @@ private:
         packet.append(data);
     }
 
-    void announce() {
+    void announce(const QHostAddress& target = QHostAddress("224.0.0.251"), const quint16 target_port = 5353) {
         if (!socket_ || instance_.isEmpty() || hostname_.isEmpty()) return;
         const QString service = QString("%1._wabridge._tcp.local").arg(instance_);
         const QString service_type = "_wabridge._tcp.local";
@@ -154,7 +168,7 @@ private:
             a_record.append(static_cast<char>(ip & 0xff));
             add_record(packet, hostname_, 1, 120, a_record);
         }
-        socket_->writeDatagram(packet, QHostAddress("224.0.0.251"), 5353);
+        socket_->writeDatagram(packet, target, target_port);
     }
 
     QTimer timer_;
@@ -225,12 +239,16 @@ public:
         brandSub->setObjectName("eyebrow");
         railLayout->addWidget(brandSub);
         railLayout->addSpacing(28);
-        for (const auto& label : {QString("⌂  Dashboard"), QString("◉  Phone Control"), QString("♫  Audio"), QString("□  Files"), QString("▣  Clipboard"), QString("⚙  Settings")}) {
+        for (const auto& label : {QString("⌂  Dashboard"), QString("◉  Phone Control"), QString("♫  Audio"), QString("□  Files"), QString("▣  Clipboard"), QString("▤  Logs"), QString("⚙  Settings")}) {
             auto* nav = new QPushButton(label, rail);
             nav->setObjectName("nav");
             nav->setProperty("selected", label.startsWith("⌂"));
             nav->setCursor(Qt::PointingHandCursor);
             connect(nav, &QPushButton::clicked, this, [this, label] {
+                if (label.contains("Logs")) {
+                    show_logs();
+                    return;
+                }
                 status_->setText(label.contains("Dashboard")
                     ? "Ready to connect — start the secure Windows coordinator"
                     : QString("%1 is ready for the authenticated Android session").arg(label.trimmed()));
@@ -398,7 +416,46 @@ private:
         return container;
     }
 
+    void append_log(const QString& message) {
+        const auto line = QString("[%1] %2").arg(QDateTime::currentDateTime().toString("HH:mm:ss"), message.trimmed());
+        log_entries_.append(line);
+        while (log_entries_.size() > 300) log_entries_.removeFirst();
+    }
+
+    void show_logs() {
+        QDialog dialog(this);
+        dialog.setWindowTitle("WABridge — Connection logs");
+        dialog.resize(760, 520);
+        auto* layout = new QVBoxLayout(&dialog);
+        auto* heading = new QLabel("Connection logs", &dialog);
+        heading->setObjectName("title");
+        layout->addWidget(heading);
+        auto* description = new QLabel("Listener, Wi-Fi advertisement, TCP, TLS, pairing, and feature events. Private keys are never logged.", &dialog);
+        description->setObjectName("subtitle");
+        description->setWordWrap(true);
+        layout->addWidget(description);
+        auto* text = new QPlainTextEdit(&dialog);
+        text->setReadOnly(true);
+        text->setStyleSheet("QPlainTextEdit { background: #0d1014; color: #d9e7f4; border: 1px solid #2c3440; border-radius: 10px; padding: 10px; font-family: Consolas; }");
+        text->setPlainText(log_entries_.join("\n"));
+        layout->addWidget(text, 1);
+        auto* buttons = new QHBoxLayout();
+        auto* clear = new QPushButton("Clear logs", &dialog);
+        auto* close = new QPushButton("Close", &dialog);
+        buttons->addWidget(clear);
+        buttons->addStretch(1);
+        buttons->addWidget(close);
+        layout->addLayout(buttons);
+        connect(clear, &QPushButton::clicked, this, [this, text] {
+            log_entries_.clear();
+            text->clear();
+        });
+        connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
+        dialog.exec();
+    }
+
     void start_coordinator() {
+        append_log("Starting Windows coordinator");
         try {
             std::string certificate;
             std::string private_key;
@@ -479,11 +536,14 @@ private:
             };
             coordinator->set_feature_dispatcher(std::move(feature_dispatcher));
             if (!coordinator->start(static_cast<std::uint16_t>(port_->value()))) {
+                append_log(QString("TCP listener failed to bind port %1").arg(port_->value()));
                 status_->setText("Unable to bind the requested TCP port");
                 return;
             }
+            append_log(QString("TCP listener bound to port %1").arg(coordinator->port()));
             coordinator_ = std::move(coordinator);
             const bool mdns_ready = mdns_ && mdns_->start(advertised_device_id, coordinator_->port());
+            append_log(mdns_ready ? "mDNS availability advertisement started" : "mDNS advertisement unavailable; manual IP and firewall checks required");
             const auto weak_coordinator = std::weak_ptr<wabridge::coordinator::SecureCoordinator>(coordinator_);
             auto request_counter = std::make_shared<std::atomic<std::uint32_t>>(1);
             input_capture_ = std::make_unique<wabridge::platform_input::LowLevelCapture>(
@@ -502,11 +562,13 @@ private:
             start_->setEnabled(false);
             stop_->setEnabled(true);
             phone_control_->setEnabled(true);
+            append_log(QString("Coordinator ready on TCP port %1").arg(coordinator_->port()));
             status_->setText(QString("Listening on TCP port %1 — awaiting Android%s%2")
                                  .arg(coordinator_->port())
                                  .arg(fingerprint.empty() ? QString() : QString(" — identity %1").arg(QString::fromStdString(fingerprint)))
                                  .arg(mdns_ready ? " — mDNS advertised" : " — mDNS unavailable; use manual IP"));
     } catch (const std::exception& error) {
+            append_log(QString("Secure coordinator failed: %1").arg(error.what()));
             status_->setText(QString("Secure coordinator failed: %1").arg(error.what()));
             coordinator_.reset();
         }
@@ -529,6 +591,7 @@ private:
     }
 
     void stop_coordinator() {
+        append_log("Stopping Windows coordinator");
         if (input_capture_) {
             input_capture_->stop();
             phone_control_->setText("Start Phone Control");
@@ -546,6 +609,7 @@ private:
         stop_->setEnabled(false);
         phone_control_->setEnabled(false);
         status_->setText("Stopped");
+        append_log("Windows coordinator stopped");
     }
 
     QLineEdit* cert_path_{};
@@ -559,6 +623,7 @@ private:
     std::shared_ptr<wabridge::coordinator::SecureCoordinator> coordinator_;
     std::unique_ptr<wabridge::platform_input::LowLevelCapture> input_capture_;
     wabridge::platform_audio::WasapiRenderer renderer_;
+    QStringList log_entries_;
     std::mutex audio_mutex_;
 };
 

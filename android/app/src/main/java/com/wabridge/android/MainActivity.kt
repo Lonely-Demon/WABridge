@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.ScreenShare
@@ -69,6 +70,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.wabridge.android.session.SessionLog
+import com.wabridge.android.session.SessionLogEntry
 import com.wabridge.android.session.SessionRuntime
 import com.wabridge.android.session.SessionState
 import com.wabridge.android.session.WABridgeSessionService
@@ -160,6 +163,7 @@ private enum class WABridgeTab(val label: String, val icon: ImageVector) {
     FEATURES("Features", Icons.Filled.Devices),
     SETUP("Setup", Icons.Filled.HelpOutline),
     SETTINGS("Settings", Icons.Filled.Settings),
+    LOGS("Logs", Icons.Filled.List),
 }
 
 @Composable
@@ -216,6 +220,7 @@ private fun WABridgeShell(
                 WABridgeTab.FEATURES -> FeaturesScreen(connected = state == SessionState.ESTABLISHED, onStartAudioCapture = onStartAudioCapture)
                 WABridgeTab.SETUP -> SetupScreen()
                 WABridgeTab.SETTINGS -> SettingsScreen()
+                WABridgeTab.LOGS -> LogsScreen()
             }
             FloatingNavigation(selected = tab, onSelect = { tab = it }, modifier = Modifier.align(Alignment.BottomCenter))
         }
@@ -425,6 +430,44 @@ private fun SetupScreen() {
         StepCard(2, "Find or enter the laptop", "Use discovery when available, or enter the Windows IP address and TCP port manually.", Icons.Filled.Wifi, WACyan)
         StepCard(3, "Compare and approve", "On first pairing, compare the device fingerprint on both screens before approving the encrypted session.", Icons.Filled.Security, WAGold)
         StepCard(4, "Choose a workspace feature", "Use Second Display, Phone Control, file transfer, clipboard, or audio as each capability becomes ready.", Icons.Filled.ScreenShare, WAGreen)
+    }
+}
+
+@Composable
+private fun LogsScreen() {
+    val entries by SessionLog.entries.collectAsState()
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 112.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Header(Icons.Filled.List, "Connection logs", "Everything WABridge tried on this device")
+            }
+            GlassButton(text = "Clear", onClick = { SessionLog.clear() }, tint = WAMuted)
+        }
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (entries.isEmpty()) {
+                    Text("No connection events yet", color = WAMuted)
+                    Text("Start discovery or enter the Windows endpoint to see each network and TLS step here.", color = WAMuted, fontSize = 13.sp, lineHeight = 19.sp)
+                } else {
+                    entries.asReversed().forEach { entry ->
+                        val tint = when (entry.level) {
+                            SessionLogEntry.Level.INFO -> WACyan
+                            SessionLogEntry.Level.WARN -> WAGold
+                            SessionLogEntry.Level.ERROR -> WAOrange
+                        }
+                        Row(verticalAlignment = Alignment.Top) {
+                            Text(entry.displayTime(), color = WAMuted, fontSize = 11.sp, modifier = Modifier.width(58.dp))
+                            Text(entry.level.name, color = tint, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(48.dp))
+                            Text(entry.message, color = Color.White, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
+        SettingsCard(Icons.Filled.Info, "What to send when asking for help", "A screenshot of this page shows whether the failure is discovery, TCP reachability, TLS verification, or first-pair approval.", WABlue)
     }
 }
 

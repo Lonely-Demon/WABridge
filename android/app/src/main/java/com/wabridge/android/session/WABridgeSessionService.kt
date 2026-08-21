@@ -57,6 +57,7 @@ class WABridgeSessionService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        SessionLog.info("WABridge session service created")
         createNotificationChannel()
         identity = AndroidIdentityStore(this)
         identity.ensureIdentity()
@@ -74,9 +75,13 @@ class WABridgeSessionService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 runCatching {
+                    val host = intent.getStringExtra(EXTRA_HOST)
+                    val port = intent.getIntExtra(EXTRA_PORT, 0)
+                    SessionLog.info(if (host.isNullOrBlank()) "Starting Wi-Fi discovery" else "Starting manual connection to $host:$port")
                     promoteSessionForeground("Starting WABridge session")
                     begin(intent)
                 }.onFailure { error ->
+                    SessionLog.error("Session service start failed: ${error.message ?: error.javaClass.simpleName}")
                     fail("Unable to start WABridge session: ${error.message ?: error.javaClass.simpleName}")
                 }
             }
@@ -97,16 +102,18 @@ class WABridgeSessionService : Service() {
         val port = intent.getIntExtra(EXTRA_PORT, 0)
         val deviceId = intent.getStringExtra(EXTRA_DEVICE_ID)
         if (!host.isNullOrBlank() && port in 1..65535) {
+            SessionLog.info("Manual endpoint accepted: $host:$port")
             connectTo(InetSocketAddress(host, port), deviceId)
             return
         }
 
+        SessionLog.info("Browsing for _wabridge._tcp on local Wi-Fi")
         discovery?.stop()
         discovery = NsdDiscovery(
             context = this,
             fingerprint = identity::fingerprint,
             onCandidate = { info -> onCandidate(info) },
-            onError = { fail(it) },
+            onError = { SessionLog.warn(it); fail(it) },
         ).also { it.startBrowsing() }
         SessionRuntime.update(SessionState.DISCOVERING, "Searching for WABridge on this Wi-Fi")
     }
@@ -114,6 +121,7 @@ class WABridgeSessionService : Service() {
     private fun onCandidate(info: NsdServiceInfo) {
         if (destroyed.get() || connectJob?.isActive == true) return
         val host = info.host ?: return fail("Windows coordinator did not provide an address")
+        SessionLog.info("Windows advertisement resolved to ${host.hostAddress}:${info.port}")
         val deviceId = info.attributes[TXT_DEVICE_ID]
             ?.toString(Charsets.UTF_8)
             ?.takeIf { it.isNotBlank() }
@@ -134,9 +142,11 @@ class WABridgeSessionService : Service() {
             )
             client = session
             try {
+                SessionLog.info("Opening TCP connection to ${endpoint.hostString}:${endpoint.port}")
                 sessions.apply(SessionEvent.TLS_STARTED)
                 SessionRuntime.update(SessionState.TLS_HANDSHAKING, "Establishing a pinned TLS 1.3 session")
                 val peer = session.connect(endpoint, expectedFingerprint, firstPair)
+                SessionLog.info("TLS 1.3 handshake completed with ${peer.hello.deviceId}")
                 sessions.apply(SessionEvent.TLS_SUCCEEDED)
                 if (advertisedDeviceId != null && advertisedDeviceId != peer.hello.deviceId) {
                     throw SecurityException("Windows device identity does not match its discovery record")
@@ -146,6 +156,7 @@ class WABridgeSessionService : Service() {
                     SessionRuntime.update(SessionState.ESTABLISHED, "Securely connected to ${peer.hello.deviceId}")
                     startReceiveLoop(session)
                 } else {
+                    SessionLog.warn("First-pair approval required for ${peer.hello.deviceId}")
                     pendingPeer = peer
                     sessions.apply(SessionEvent.PAIRING_NEEDED)
                     SessionRuntime.requirePairing(
@@ -155,7 +166,9 @@ class WABridgeSessionService : Service() {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Throwable) {
-                fail(connectionFailure(endpoint, error))
+                val detail = connectionFailure(endpoint, error)
+                SessionLog.error(detail)
+                fail(detail)
                 session.stop()
             }
         }
@@ -261,6 +274,7 @@ class WABridgeSessionService : Service() {
 
     private fun fail(detail: String) {
         if (destroyed.get()) return
+        SessionLog.error(detail)
         sessions.apply(SessionEvent.FAILURE)
         SessionRuntime.update(SessionState.FAILED, detail)
         updateNotification(detail)
@@ -268,6 +282,7 @@ class WABridgeSessionService : Service() {
 
     private fun stopSession() {
         if (!destroyed.compareAndSet(false, true)) return
+        SessionLog.info("Stopping WABridge session")
         connectJob?.cancel()
         connectJob = null
         receiveJob?.cancel()
