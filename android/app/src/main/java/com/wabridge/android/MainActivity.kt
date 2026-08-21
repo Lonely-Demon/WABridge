@@ -89,7 +89,7 @@ private val WASurface = Color(0xFF1C1C1E)
 private val WAStroke = Color(0x2AFFFFFF)
 private val WAMuted = Color(0xFFC1C6D7)
 
-class MainActivity : ComponentActivity {
+class MainActivity : ComponentActivity() {
     private var qrPayload by mutableStateOf<QrPairingPayload?>(null)
 
     private val projectionLauncher = registerForActivityResult(
