@@ -8,6 +8,7 @@
 #include "wabridge_tls.h"
 
 #include <QApplication>
+#include <QAbstractSocket>
 #include <QCryptographicHash>
 #include <QFile>
 #include <QFileDialog>
@@ -19,11 +20,15 @@
 #include <QLineEdit>
 #include <QMainWindow>
 #include <QMetaObject>
+#include <QHostAddress>
+#include <QNetworkInterface>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QStackedWidget>
 #include <QSpinBox>
 #include <QTimer>
+#include <QUdpSocket>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -36,8 +41,132 @@
 #include <utility>
 
 namespace {
+class MdnsAdvertiser final : public QObject {
+public:
+    explicit MdnsAdvertiser(QObject* parent = nullptr) : QObject(parent), timer_(this) {
+        connect(&timer_, &QTimer::timeout, this, [this] { announce(); });
+    }
+
+    bool start(const QString& device_id, const quint16 port) {
+        stop();
+        if (device_id.trimmed().isEmpty() || port == 0) return false;
+        device_id_ = device_id.trimmed().left(48);
+        instance_ = QString("%1 WABridge").arg(device_id_).left(62);
+        hostname_ = QString("wabridge-%1.local").arg(device_id_.replace(QRegularExpression("[^A-Za-z0-9-]"), "-").toLower()).left(62);
+        port_ = port;
+        socket_ = std::make_unique<QUdpSocket>();
+        if (!socket_->bind(QHostAddress::AnyIPv4, 5353, QAbstractSocket::ShareAddress | QAbstractSocket::ReuseAddressHint)) {
+            socket_.reset();
+            return false;
+        }
+        announce();
+        timer_.start(3000);
+        return true;
+    }
+
+    void stop() noexcept {
+        timer_.stop();
+        if (socket_) {
+            socket_->close();
+            socket_.reset();
+        }
+        device_id_.clear();
+        instance_.clear();
+        hostname_.clear();
+        port_ = 0;
+    }
+
+private:
+    static void append_u16(QByteArray& packet, const quint16 value) {
+        packet.append(static_cast<char>((value >> 8) & 0xff));
+        packet.append(static_cast<char>(value & 0xff));
+    }
+
+    static void append_u32(QByteArray& packet, const quint32 value) {
+        packet.append(static_cast<char>((value >> 24) & 0xff));
+        packet.append(static_cast<char>((value >> 16) & 0xff));
+        packet.append(static_cast<char>((value >> 8) & 0xff));
+        packet.append(static_cast<char>(value & 0xff));
+    }
+
+    static QByteArray dns_name(const QString& name) {
+        QByteArray encoded;
+        for (const auto& label : name.split('.')) {
+            const auto bytes = label.toUtf8().left(63);
+            encoded.append(static_cast<char>(bytes.size()));
+            encoded.append(bytes);
+        }
+        encoded.append('\0');
+        return encoded;
+    }
+
+    static void add_record(QByteArray& packet, const QString& owner, const quint16 type, const quint32 ttl, const QByteArray& data) {
+        packet.append(dns_name(owner));
+        append_u16(packet, type);
+        append_u16(packet, 0x0001); // IN; mDNS cache-flush is not needed for these records.
+        append_u32(packet, ttl);
+        append_u16(packet, static_cast<quint16>(data.size()));
+        packet.append(data);
+    }
+
+    void announce() {
+        if (!socket_ || instance_.isEmpty() || hostname_.isEmpty()) return;
+        const QString service = QString("%1._wabridge._tcp.local").arg(instance_);
+        const QString service_type = "_wabridge._tcp.local";
+        const auto addresses = QNetworkInterface::allAddresses();
+        quint16 answer_count = 3;
+        for (const auto& address : addresses) {
+            if (address.protocol() == QAbstractSocket::IPv4Protocol && !address.isLoopback()) ++answer_count;
+        }
+        QByteArray packet;
+        append_u16(packet, 0);
+        append_u16(packet, 0x8400); // unsolicited authoritative response
+        append_u16(packet, answer_count);
+        append_u16(packet, 0);
+        append_u16(packet, 0);
+        add_record(packet, service_type, 12, 120, dns_name(service));
+
+        QByteArray srv;
+        append_u16(srv, 0);
+        append_u16(srv, 0);
+        append_u16(srv, port_);
+        srv.append(dns_name(hostname_));
+        add_record(packet, service, 33, 120, srv);
+
+        QByteArray txt;
+        const auto add_txt = [&txt](const QByteArray& value) {
+            const auto bounded = value.left(255);
+            txt.append(static_cast<char>(bounded.size()));
+            txt.append(bounded);
+        };
+        add_txt("version=1");
+        add_txt("role=windows");
+        add_txt(QString("device_id=%1").arg(device_id_).toUtf8());
+        add_record(packet, service, 16, 120, txt);
+
+        for (const auto& address : addresses) {
+            if (address.protocol() != QAbstractSocket::IPv4Protocol || address.isLoopback()) continue;
+            const quint32 ip = address.toIPv4Address();
+            QByteArray a_record;
+            a_record.append(static_cast<char>((ip >> 24) & 0xff));
+            a_record.append(static_cast<char>((ip >> 16) & 0xff));
+            a_record.append(static_cast<char>((ip >> 8) & 0xff));
+            a_record.append(static_cast<char>(ip & 0xff));
+            add_record(packet, hostname_, 1, 120, a_record);
+        }
+        socket_->writeDatagram(packet, QHostAddress("224.0.0.251"), 5353);
+    }
+
+    QTimer timer_;
+    std::unique_ptr<QUdpSocket> socket_;
+    QString device_id_;
+    QString instance_;
+    QString hostname_;
+    quint16 port_{0};
+};
 
 std::string read_file(const QString& path) {
+
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) return {};
     const QByteArray contents = file.readAll();
@@ -226,6 +355,7 @@ public:
         contentLayout->addStretch(1);
         shell->addWidget(content, 1);
         setCentralWidget(root);
+        mdns_ = std::make_unique<MdnsAdvertiser>(this);
 
         connect(start_, &QPushButton::clicked, this, &CoordinatorWindow::start_coordinator);
         connect(stop_, &QPushButton::clicked, this, &CoordinatorWindow::stop_coordinator);
@@ -242,6 +372,7 @@ public:
             }
         });
         timer->start(500);
+        QTimer::singleShot(0, this, &CoordinatorWindow::start_coordinator);
     }
 
     ~CoordinatorWindow() override { stop_coordinator(); }
@@ -298,9 +429,10 @@ private:
         hello.device_id = qEnvironmentVariable("COMPUTERNAME", "windows-coordinator").toStdString();
         if (hello.device_id.empty() || hello.device_id.size() > 64) hello.device_id = "windows-coordinator";
         std::copy(capability_bytes.cbegin(), capability_bytes.cend(), hello.capabilities_hash.begin());
-        hello.max_frame = 4U * 1024U * 1024U;
-
+                hello.max_frame = 4U * 1024U * 1024U;
+            const QString advertised_device_id = QString::fromStdString(hello.device_id);
             auto context = wabridge::tls::Context::server(certificate, private_key, std::nullopt);
+
             auto coordinator = std::make_shared<wabridge::coordinator::SecureCoordinator>(std::move(context), std::move(hello));
             wabridge::features::Dispatcher feature_dispatcher;
             feature_dispatcher.on_file_offer = [this](const wabridge::file::Offer& offer) {
@@ -351,6 +483,7 @@ private:
                 return;
             }
             coordinator_ = std::move(coordinator);
+            const bool mdns_ready = mdns_ && mdns_->start(advertised_device_id, coordinator_->port());
             const auto weak_coordinator = std::weak_ptr<wabridge::coordinator::SecureCoordinator>(coordinator_);
             auto request_counter = std::make_shared<std::atomic<std::uint32_t>>(1);
             input_capture_ = std::make_unique<wabridge::platform_input::LowLevelCapture>(
@@ -369,9 +502,10 @@ private:
             start_->setEnabled(false);
             stop_->setEnabled(true);
             phone_control_->setEnabled(true);
-            status_->setText(QString("Listening on TCP port %1 — awaiting Android%s")
+            status_->setText(QString("Listening on TCP port %1 — awaiting Android%s%2")
                                  .arg(coordinator_->port())
-                                 .arg(fingerprint.empty() ? QString() : QString(" — identity %1").arg(QString::fromStdString(fingerprint))));
+                                 .arg(fingerprint.empty() ? QString() : QString(" — identity %1").arg(QString::fromStdString(fingerprint)))
+                                 .arg(mdns_ready ? " — mDNS advertised" : " — mDNS unavailable; use manual IP"));
     } catch (const std::exception& error) {
             status_->setText(QString("Secure coordinator failed: %1").arg(error.what()));
             coordinator_.reset();
@@ -403,6 +537,7 @@ private:
             std::lock_guard lock(audio_mutex_);
             renderer_.stop();
         }
+        if (mdns_) mdns_->stop();
         if (!coordinator_) return;
         coordinator_->stop();
         coordinator_.reset();
@@ -420,6 +555,7 @@ private:
     QPushButton* start_{};
     QPushButton* stop_{};
     QPushButton* phone_control_{};
+    std::unique_ptr<MdnsAdvertiser> mdns_;
     std::shared_ptr<wabridge::coordinator::SecureCoordinator> coordinator_;
     std::unique_ptr<wabridge::platform_input::LowLevelCapture> input_capture_;
     wabridge::platform_audio::WasapiRenderer renderer_;

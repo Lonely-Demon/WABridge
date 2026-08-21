@@ -26,7 +26,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.net.ConnectException
 import java.net.InetSocketAddress
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import javax.net.ssl.SSLHandshakeException
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -151,9 +155,21 @@ class WABridgeSessionService : Service() {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Throwable) {
-                fail("Session failed: ${error.message ?: error.javaClass.simpleName}")
+                fail(connectionFailure(endpoint, error))
                 session.stop()
             }
+        }
+    }
+
+    private fun connectionFailure(endpoint: InetSocketAddress, error: Throwable): String {
+        val address = "${endpoint.hostString}:${endpoint.port}"
+        return when (error) {
+            is SocketTimeoutException -> "Windows at $address did not respond within 5 seconds; check that WABridge is running and Windows Firewall allows TCP ${endpoint.port}"
+            is ConnectException -> "Windows at $address refused or blocked the connection; start WABridge and allow TCP ${endpoint.port} through Windows Firewall"
+            is UnknownHostException -> "Windows host $address could not be resolved; use the physical Wi-Fi IPv4 address"
+            is SSLHandshakeException -> "TCP reached Windows at $address, but TLS verification failed: ${error.message ?: "certificate or protocol mismatch"}"
+            is SecurityException -> "Windows identity verification failed at $address: ${error.message ?: "pairing or certificate mismatch"}"
+            else -> "Session to Windows at $address failed: ${error.message ?: error.javaClass.simpleName}"
         }
     }
 
